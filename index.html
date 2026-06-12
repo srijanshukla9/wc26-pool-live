@@ -292,9 +292,82 @@
   .scoring b { color: var(--ink); }
   footer { border-top: 1px solid var(--line); margin-top: 40px; padding: 26px 0 50px; }
   footer .meta { text-align: center; font-size: 12px; color: var(--dim); }
+
+  /* ============ v3 visual layer — SuperBru-grade identity ============ */
+  html, body { overflow-x: hidden; }
+  body { background: #07090d; }
+  .page-bg { position: fixed; inset: 0; z-index: 0;
+    background: #07090d url('https://www.fifaprediction.online/images/stadium.jpg') center/cover no-repeat; }
+  .page-bg::after { content: ''; position: absolute; inset: 0; backdrop-filter: blur(6px);
+    background: radial-gradient(ellipse at 50% -10%, rgba(7,9,13,.5), rgba(7,9,13,.9) 75%); }
+  .shell { max-width: 1240px; margin: 0 auto; background: var(--bg); min-height: 100vh;
+    box-shadow: 0 0 90px rgba(0,0,0,.65); position: relative; z-index: 1; }
+  @media (min-width: 1280px) { .shell { border-left: 1px solid var(--line); border-right: 1px solid var(--line); } }
+
+  /* gold identity band */
+  .goldband { background: linear-gradient(92deg, #1d1504 0%, #54400f 52%, #c89a2e 100%); border-bottom: 1px solid rgba(0,0,0,.25); }
+  .goldband .inner { max-width: var(--maxw); margin: 0 auto; padding: 13px 20px; display: flex; align-items: center; gap: 14px; color: #fff; }
+  .gb-left { display: flex; align-items: center; gap: 12px; }
+  .gb-logo { width: 46px; height: 46px; border-radius: 50%; flex: 0 0 auto;
+    background: radial-gradient(circle at 35% 30%, #f7dd9b, #D3A43B 60%, #8a6a1d);
+    display: grid; place-items: center; font-size: 22px; box-shadow: 0 2px 10px rgba(0,0,0,.45), inset 0 1px 2px rgba(255,255,255,.5); }
+  .gb-kicker { font-size: 10px; font-weight: 800; letter-spacing: 2px; color: #f3dfae; text-transform: uppercase; }
+  .gb-title { font-size: 21px; font-weight: 900; letter-spacing: .2px; line-height: 1.15; text-shadow: 0 1px 2px rgba(0,0,0,.35); }
+  .gb-stats { margin-left: auto; display: flex; align-items: center; gap: 16px; }
+  .gb-stats .ava { display: block; }
+  .gb-name { font-size: 13px; font-weight: 800; line-height: 1.2; }
+  .gb-name span { display: block; font-size: 10px; font-weight: 600; color: rgba(243,223,174,.85); }
+  .gb-col { text-align: center; }
+  .gb-col b { display: block; font-size: 16px; font-weight: 900; font-variant-numeric: tabular-nums; line-height: 1.1; }
+  .gb-col span { font-size: 9.5px; font-weight: 700; letter-spacing: .8px; text-transform: uppercase; color: rgba(243,223,174,.8); }
+  @media (max-width: 680px) { .gb-name { display: none; } .gb-title { font-size: 17px; } .gb-kicker { letter-spacing: 1.2px; } .gb-col b { font-size: 14px; } .gb-stats { gap: 11px; } }
+
+  /* slimmer hero under the band */
+  .hero .inner { padding: 26px 20px 22px; }
+  .hero h1 { font-size: clamp(32px, 5.5vw, 58px); }
+
+  /* match cards: kit duel anatomy */
+  .match .duel { display: grid; grid-template-columns: 1fr auto 1fr; align-items: start; gap: 6px; padding: 6px 0 2px; }
+  .match .side { text-align: center; min-width: 0; }
+  .match .side .tnm { font-size: 12.5px; font-weight: 700; margin-top: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .match .side.lose { opacity: .55; }
+  .match .mid { display: flex; align-items: center; gap: 8px; padding-top: 13px; font-variant-numeric: tabular-nums; }
+  .match .mid .num { font-size: 31px; font-weight: 900; line-height: 1; }
+  .match .mid .num.lose { color: var(--dim); }
+  .match .mid .dash { font-size: 19px; color: var(--dim); font-weight: 700; }
+  .match .mid .vs { font-size: 12px; font-weight: 800; color: var(--dim); letter-spacing: 1.5px; text-transform: uppercase; padding-top: 8px; }
+  .kitvg { filter: drop-shadow(0 2px 3px rgba(0,0,0,.2)); }
+
+  /* status cards with icon chips */
+  .stat-card { display: flex; align-items: center; gap: 12px; padding: 14px 16px; }
+  .stat-card .ic { width: 42px; height: 42px; border-radius: 12px; flex: 0 0 auto;
+    background: linear-gradient(135deg, var(--hl-bg), var(--chip)); border: 1px solid var(--line);
+    display: grid; place-items: center; font-size: 20px; }
+  .stat-card .v { font-size: 24px; margin-top: 2px; }
+  .stat-card .s { font-size: 11.5px; }
+
+  /* podium avatars */
+  .pod { padding: 18px 10px 16px; }
+  .pod-ava { position: relative; display: inline-block; line-height: 0; }
+  .pod-medal { position: absolute; right: -8px; bottom: -4px; font-size: 19px; line-height: 1; }
+  .pod .nm { margin-top: 9px; font-size: 16px; }
+  .pod .pts { font-size: 28px; }
+  .pod.p1 { background: linear-gradient(180deg, var(--hl-bg), var(--card)); }
+  @media (max-width: 560px) { .pod-ava { flex: 0 0 auto; } }
+
+  /* leaderboard avatars + bolder hierarchy */
+  .entry-head { grid-template-columns: 24px 44px 1fr auto; gap: 10px; }
+  .rank { font-size: 15px; }
+  .lb-ava { line-height: 0; }
+  .lb-ava .ava { display: block; }
+  .who .nm { font-size: 16px; }
+  .nums .big { font-size: 26px; }
+  .nums .lbl { font-size: 10.5px; }
 </style>
 </head>
 <body>
+<div class="page-bg"></div>
+<div class="shell">
 <nav>
   <div class="inner">
     <div class="brand"><span class="logo">⚽</span> <span>FIFA Prediction Pro</span></div>
@@ -304,6 +377,19 @@
     <button class="navbtn" id="themeBtn" title="Toggle theme">🌙</button>
   </div>
 </nav>
+
+<div class="goldband">
+  <div class="inner">
+    <div class="gb-left">
+      <span class="gb-logo">🏆</span>
+      <div>
+        <div class="gb-kicker">Sp Jain Friends · World Cup 2026</div>
+        <div class="gb-title">FIFA Prediction Pro</div>
+      </div>
+    </div>
+    <div class="gb-stats" id="profileStrip"></div>
+  </div>
+</div>
 
 <header class="hero">
   <div class="bg"></div>
@@ -415,9 +501,11 @@
   <div class="meta">FIFA Prediction Pro · live results via ESPN · auto-refreshes every 60s · built as a live companion to fifaprediction.online</div>
 </footer>
 
+</div><!-- /shell -->
 <script src="data.js"></script>
 <script src="engine.js"></script>
 <script src="ratings.js"></script>
+<script src="viz.js"></script>
 <script src="mc.js"></script>
 <script src="app.js"></script>
 </body>

@@ -28,6 +28,11 @@
   const teamHtml = t => `${flag(t)} ${esc(t)}`;
   const $ = id => document.getElementById(id);
 
+  /* visual identity (viz.js) — optional, degrade to flags/nothing */
+  const hasViz = (() => { try { return typeof VIZ !== 'undefined' && !!VIZ; } catch (e) { return false; } })();
+  const kit = (t, s) => hasViz ? VIZ.kit(t, s) : flag(t);
+  const avatar = (n, s, o) => hasViz ? VIZ.avatar(n, s, o) : '';
+
   const ESPN_URL = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=20260611-20260719&limit=200';
   const FIFA_URL = 'https://api.fifa.com/api/v3/calendar/matches?idSeason=285023&idCompetition=17&language=en&count=200';
   const ROUND_LABELS = { group: 'Group Stage', r32: 'Round of 32', r16: 'Round of 16', qf: 'Quarterfinals', sf: 'Semifinals', third: '3rd-Place', final: 'Final' };
@@ -135,23 +140,36 @@
     const cards = [];
     const you = rows.find(r => isYou(r.name));
     if (you) {
-      cards.push({ k: 'Your rank', v: '#' + you.rank, s: 'of ' + rows.length, cls: '' });
-      cards.push({ k: 'Projected', v: String(you.projected), s: 'max ' + you.max, cls: 'green' });
+      cards.push({ i: '🏅', k: 'Your rank', v: '#' + you.rank, s: 'of ' + rows.length, cls: '' });
+      cards.push({ i: '📈', k: 'Projected', v: String(you.projected), s: 'max ' + you.max, cls: 'green' });
     }
     const sim = simCache.sim;
     if (sim && sim.winProb && you && typeof sim.winProb[you.name] === 'number') {
-      cards.push({ k: 'Win odds', v: (sim.winProb[you.name] * 100).toFixed(1) + '%', s: (sim.sims || '') + ' sims', cls: 'gold' });
+      cards.push({ i: '🎲', k: 'Win odds', v: (sim.winProb[you.name] * 100).toFixed(1) + '%', s: (sim.sims || '') + ' sims', cls: 'gold' });
     }
     const cr = currentCrown();
     if (cr) {
       cards.push({
-        k: 'Crown 👑', v: cr.winners.map(firstName).join(' & '),
+        i: '👑', k: 'Crown', v: cr.winners.map(firstName).join(' & '),
         s: cr.round + (cr.done ? '' : ' · live') + ' · ' + cr.pts + ' pts', cls: 'gold',
       });
     }
     $('statusCards').innerHTML = cards.map(c =>
-      `<div class="card stat-card"><div class="k">${esc(c.k)}</div><div class="v ${c.cls}">${esc(c.v)}</div><div class="s">${esc(c.s)}</div></div>`
+      `<div class="card stat-card"><div class="ic">${c.i}</div><div><div class="k">${esc(c.k)}</div><div class="v ${c.cls}">${esc(c.v)}</div><div class="s">${esc(c.s)}</div></div></div>`
     ).join('');
+
+    // gold band profile strip (SuperBru-style identity bar)
+    const strip = $('profileStrip');
+    if (strip && you) {
+      const win = (sim && sim.winProb && typeof sim.winProb[you.name] === 'number') ? (sim.winProb[you.name] * 100).toFixed(1) + '%' : '—';
+      const crowns = crownCounts()[you.name] || 0;
+      strip.innerHTML = `${avatar(you.name, 40, { ring: 'rgba(255,255,255,.65)' })}
+        <div class="gb-name">${esc(firstName(you.name) === 'You' ? 'Srijan' : firstName(you.name))}<span>${esc(POOL.poolName)}</span></div>
+        <div class="gb-col"><b>#${you.rank}</b><span>Rank</span></div>
+        <div class="gb-col"><b>${you.projected}</b><span>Pts</span></div>
+        <div class="gb-col"><b>${esc(win)}</b><span>Win%</span></div>
+        <div class="gb-col"><b>${crowns ? '👑×' + crowns : '👑 ' + 0}</b><span>Crowns</span></div>`;
+    }
   }
 
   /* ============================ match cards (shared) ============================ */
@@ -245,10 +263,16 @@
       }
     }
     const openCls = (mode !== 'home' && openStakes.has(matchKey(m))) ? 'stk-open' : '';
+    const mid = showSc
+      ? `<span class="num ${cls('h')}">${m.hs}</span><span class="dash">–</span><span class="num ${cls('a')}">${m.as}</span>`
+      : `<span class="vs">vs</span>`;
     return `<div class="match ${openCls}" data-mi="${mi}">
       <div class="mini-banner"><span class="rd">${esc(grp)}</span>${right}</div>
-      <div class="team ${cls('h')}"><span>${teamHtml(m.home)}</span><span class="sc">${showSc ? m.hs : ''}</span></div>
-      <div class="team ${cls('a')}"><span>${teamHtml(m.away)}</span><span class="sc">${showSc ? m.as : ''}</span></div>
+      <div class="duel">
+        <div class="side ${cls('h')}">${kit(m.home, 52)}<div class="tnm">${esc(m.home)}</div></div>
+        <div class="mid">${mid}</div>
+        <div class="side ${cls('a')}">${kit(m.away, 52)}<div class="tnm">${esc(m.away)}</div></div>
+      </div>
       ${calledHtml}${stakesHtml}
     </div>`;
   }
@@ -397,8 +421,9 @@
     const order = [top[1], top[0], top[2]].filter(Boolean); // 2nd, 1st, 3rd
     $('podium').innerHTML = order.map(r => {
       const medal = ['🥇', '🥈', '🥉'][r.rank - 1];
+      const ringCol = ['#D3A43B', '#b9c4d4', '#cd8f52'][r.rank - 1];
       return `<div class="card pod ${r.rank === 1 ? 'p1' : ''}">
-        <div class="medal">${medal}</div>
+        <div class="pod-ava">${avatar(r.name, r.rank === 1 ? 62 : 50, { ring: ringCol, crown: r.rank === 1 })}<span class="pod-medal">${medal}</span></div>
         <div>
           <div class="nm">${esc(r.name)}</div>
           <div class="ch">👑 ${teamHtml(r.champion)}</div>
@@ -431,6 +456,7 @@
       return `<div class="entry ${isYou(r.name) ? 'you' : ''} ${openNames.has(r.name) ? 'open' : ''}" data-name="${esc(r.name)}">
         <div class="entry-head">
           <div class="rank">${medal}</div>
+          <div class="lb-ava">${avatar(r.name, 38, cc[r.name] ? { ring: '#D3A43B' } : null)}</div>
           <div class="who">
             <div class="nm">${esc(r.name)}${isYou(r.name) ? '<span class="youtag">YOU</span>' : ''}${crownTag}${d}</div>
             <div class="ch">👑 <span class="${r.championAlive ? '' : 'dead'}">${teamHtml(r.champion)}</span> · <span class="${champClass}">${r.championAlive ? 'still in' : 'eliminated −50'}</span></div>
