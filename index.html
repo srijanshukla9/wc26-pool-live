@@ -4,15 +4,19 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex">
-<title>Sp Jain Friends — World Cup 2026 Live Pool</title>
+<meta name="theme-color" content="#0a1828">
+<title>FIFA Prediction Pro — Sp Jain Friends WC26</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <style>
-  /* ---- Design tokens copied from fifaprediction.online (light + dark) ---- */
+  /* ---- Design tokens (light + dark) ---- */
   :root {
     --gold: #D3A43B; --gold-soft: #E6C36B; --gold-ink: #1a1408;
     --green: #1f9d57; --green-soft: #3ddc84; --red: #d64545; --blue: #2f6fed;
+    --navy: #0a1828;
     --r-sm: 8px; --r-md: 12px; --r-lg: 16px;
     --shadow: 0 1px 2px rgba(0,0,0,.04), 0 8px 24px rgba(0,0,0,.06);
     --maxw: 1180px;
@@ -20,12 +24,12 @@
   :root[data-theme="light"] {
     --bg: #F4F1EA; --bg2: #ECE7DB; --ink: #11131A; --dim: #6b6456; --faint: #9c948320;
     --line: #DDD7CA; --card: #FFFFFF; --card2: #F7F4EC; --hl-bg: #FDF7E8; --hl-line: var(--gold);
-    --hero-ink: #ffffff; --chip: #F0EBDE; --shadow-on: 1;
+    --hero-ink: #ffffff; --chip: #F0EBDE;
   }
   :root[data-theme="dark"] {
     --bg: #080807; --bg2: #100F0C; --ink: #F7F3EA; --dim: #a39a86; --faint: #ffffff14;
     --line: #3B3529; --card: #12120F; --card2: #1a1813; --hl-bg: #221B10; --hl-line: rgba(211,164,59,.6);
-    --hero-ink: #ffffff; --chip: #1f1c15; --shadow-on: 0;
+    --hero-ink: #ffffff; --chip: #1f1c15;
     --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.5);
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -49,13 +53,13 @@
   nav .brand { display: flex; align-items: center; gap: 9px; font-weight: 800; letter-spacing: .2px; font-size: 15px; }
   nav .brand .logo { width: 30px; height: 30px; border-radius: 8px; background: linear-gradient(135deg, var(--gold), #b5882c); display: grid; place-items: center; font-size: 16px; box-shadow: var(--shadow); }
   nav .spacer { flex: 1; }
-  nav .navbtn { font-size: 13px; font-weight: 600; color: var(--dim); padding: 7px 12px; border-radius: 999px; border: 1px solid transparent; text-decoration: none; cursor: pointer; background: none; }
+  nav .navbtn { font-size: 13px; font-weight: 600; color: var(--dim); padding: 7px 12px; border-radius: 999px; border: 1px solid transparent; text-decoration: none; cursor: pointer; background: none; font-family: inherit; }
   nav .navbtn:hover { color: var(--ink); background: var(--card2); border-color: var(--line); }
   @media (max-width: 680px) { nav .navbtn.hide-sm { display: none; } nav .brand .full { display: none; } }
 
   /* ---- Hero ---- */
   .hero { position: relative; overflow: hidden; border-bottom: 1px solid var(--line); }
-  .hero .bg { position: absolute; inset: 0; background: #0a1828 url('https://www.fifaprediction.online/images/stadium.jpg') center/cover no-repeat; }
+  .hero .bg { position: absolute; inset: 0; background: var(--navy) url('https://www.fifaprediction.online/images/stadium.jpg') center/cover no-repeat; }
   .hero .bg::after { content:''; position:absolute; inset:0; background: linear-gradient(105deg, rgba(6,12,22,.92) 0%, rgba(6,12,22,.72) 45%, rgba(6,12,22,.55) 100%); }
   .hero .inner { position: relative; max-width: var(--maxw); margin: 0 auto; padding: 40px 20px 30px; color: var(--hero-ink); }
   .eyebrow { display: inline-flex; align-items: center; gap: 7px; color: var(--gold-soft); font-weight: 800; font-size: 12px; letter-spacing: 1.6px; text-transform: uppercase; }
@@ -68,7 +72,7 @@
   .pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; padding: 7px 13px; border-radius: 999px; background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.18); color: #fff; }
   .pill.live { border-color: rgba(214,69,69,.6); color: #ffd2d2; }
   .pill .live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--red); animation: ping 1.6s infinite; }
-  .btn { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 700; padding: 8px 15px; border-radius: 999px; cursor: pointer; border: 1px solid transparent; transition: transform .08s ease, filter .15s ease; text-decoration: none; }
+  .btn { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 700; padding: 8px 15px; border-radius: 999px; cursor: pointer; border: 1px solid transparent; transition: transform .08s ease, filter .15s ease; text-decoration: none; font-family: inherit; }
   .btn:active { transform: translateY(1px); }
   .btn.gold { background: var(--gold); color: var(--gold-ink); }
   .btn.gold:hover { filter: brightness(1.06); }
@@ -79,9 +83,9 @@
   .tabs { position: sticky; top: 53px; z-index: 40; background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
   .tabs .inner { max-width: var(--maxw); margin: 0 auto; padding: 0 20px; display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; }
   .tabs .inner::-webkit-scrollbar { display: none; }
-  .tab { flex: 0 0 auto; padding: 14px 14px 11px; font-size: 14px; font-weight: 600; color: var(--dim); border-bottom: 2.5px solid transparent; cursor: pointer; background: none; white-space: nowrap; }
+  .tab { flex: 0 0 auto; padding: 14px 14px 11px; font-size: 14px; font-weight: 600; color: var(--dim); border-bottom: 2.5px solid transparent; cursor: pointer; background: none; border-top: none; border-left: none; border-right: none; white-space: nowrap; font-family: inherit; }
   .tab:hover { color: var(--ink); }
-  .tab.active { color: var(--ink); border-color: var(--gold); }
+  .tab.active { color: var(--ink); border-bottom-color: var(--gold); }
   .tab .badge { font-size: 11px; background: var(--chip); border-radius: 999px; padding: 1px 7px; margin-left: 4px; color: var(--dim); }
 
   main { padding: 26px 0 70px; }
@@ -91,9 +95,36 @@
   h2.sec { font-size: 13px; font-weight: 800; letter-spacing: 1.4px; text-transform: uppercase; color: var(--gold); margin: 0 0 4px; }
   .sec-lead { color: var(--dim); font-size: 13.5px; margin-bottom: 16px; }
   .err { background: color-mix(in srgb, var(--red) 14%, var(--card)); border: 1px solid var(--red); color: var(--red); border-radius: var(--r-md); padding: 11px 15px; margin: 14px 0; font-size: 13.5px; display: none; }
+  .mt { margin-top: 28px; }
 
   /* ---- Cards ---- */
   .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--r-md); box-shadow: var(--shadow); }
+  .skeleton { color: var(--dim); text-align: center; padding: 50px 0; font-size: 14px; }
+
+  /* ---- Home: status cards ---- */
+  .status-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 26px; }
+  .stat-card { padding: 13px 16px; }
+  .stat-card .k { font-size: 10.5px; font-weight: 700; letter-spacing: .8px; text-transform: uppercase; color: var(--dim); }
+  .stat-card .v { font-size: 22px; font-weight: 900; margin-top: 4px; font-variant-numeric: tabular-nums; line-height: 1.2; }
+  .stat-card .v.gold { color: var(--gold); }
+  .stat-card .v.green { color: var(--green); }
+  .stat-card .s { font-size: 11.5px; color: var(--dim); margin-top: 2px; }
+
+  /* ---- Home: rooting guide ---- */
+  .root-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; }
+  .root-card { padding: 13px 15px; }
+  .root-card .hd { font-size: 13.5px; font-weight: 700; margin-bottom: 1px; }
+  .root-card .tm { font-size: 11px; color: var(--dim); margin-bottom: 8px; }
+  .root-row { display: flex; justify-content: space-between; gap: 8px; font-size: 12.5px; padding: 3px 0; }
+  .root-row b { font-variant-numeric: tabular-nums; }
+  .root-verdict { margin-top: 8px; font-size: 12px; font-weight: 800; color: var(--gold); }
+  .shimmer { height: 12px; border-radius: 6px; background: var(--faint); animation: sh 1.2s infinite; }
+  @keyframes sh { 0%,100% { opacity: .45; } 50% { opacity: 1; } }
+  .d-pos { color: var(--green); } .d-neg { color: var(--red); } .d-zero { color: var(--dim); }
+
+  /* ---- Home: recap strip ---- */
+  .recap-strip { margin-top: 24px; padding: 13px 16px; font-size: 13px; line-height: 1.7; }
+  .recap-strip b { color: var(--gold); }
 
   /* ---- Podium ---- */
   .podium { display: grid; grid-template-columns: 1fr 1.15fr 1fr; gap: 12px; align-items: end; margin-bottom: 22px; }
@@ -114,6 +145,7 @@
   .who { min-width: 0; }
   .who .nm { font-weight: 700; font-size: 15.5px; display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
   .youtag { font-size: 9.5px; font-weight: 800; letter-spacing: .5px; background: var(--gold); color: var(--gold-ink); padding: 2px 6px; border-radius: 4px; }
+  .crowntag { font-size: 13px; }
   .who .ch { font-size: 12.5px; color: var(--dim); margin-top: 3px; }
   .who .ch .dead { color: var(--red); text-decoration: line-through; opacity: .8; }
   .who .ch .outtag { color: var(--red); font-weight: 700; }
@@ -123,11 +155,12 @@
   .nums .big { font-size: 23px; font-weight: 900; color: var(--green); font-variant-numeric: tabular-nums; line-height: 1; }
   .nums .lbl { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; color: var(--dim); margin-top: 3px; }
   .nums .small { font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .nums .col.win-col .small { color: var(--blue); }
   .nums .chev { color: var(--dim); font-size: 13px; transition: transform .2s ease; }
   .entry.open .chev { transform: rotate(180deg); }
   .delta { font-size: 11px; font-weight: 800; margin-left: 5px; }
   .delta.up { color: var(--green); } .delta.dn { color: var(--red); }
-  @media (max-width: 560px) { .nums .col.max-col { display: none; } .nums { gap: 12px; } }
+  @media (max-width: 560px) { .nums .col.max-col { display: none; } .nums { gap: 11px; } }
 
   .detail { display: none; border-top: 1px solid var(--line); padding: 16px; background: var(--card2); }
   .entry.open .detail { display: block; }
@@ -139,6 +172,8 @@
   .cats { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 7px; }
   .cat { display: flex; justify-content: space-between; align-items: center; background: var(--card); border: 1px solid var(--line); border-radius: var(--r-sm); padding: 8px 11px; font-size: 12.5px; }
   .cat b { font-variant-numeric: tabular-nums; } .cat .of { color: var(--dim); font-weight: 400; }
+  .bucketrow { margin: 12px 0 0; font-size: 12.5px; font-weight: 700; color: var(--ink); }
+  .bucketrow span { color: var(--dim); font-weight: 500; }
   .picks { margin-top: 14px; font-size: 12.5px; color: var(--dim); line-height: 1.9; }
   .picks .lab { font-weight: 700; color: var(--ink); }
   .chip2 { display: inline-flex; align-items: center; gap: 4px; background: var(--chip); border-radius: 6px; padding: 2px 8px; margin: 2px 2px; font-size: 12px; color: var(--ink); }
@@ -150,38 +185,88 @@
   /* ---- Matches ---- */
   .roundbar { display: flex; gap: 7px; overflow-x: auto; padding-bottom: 12px; scrollbar-width: none; }
   .roundbar::-webkit-scrollbar { display: none; }
-  .rchip { flex: 0 0 auto; font-size: 13px; font-weight: 600; padding: 7px 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--dim); cursor: pointer; }
+  .rchip { flex: 0 0 auto; font-size: 13px; font-weight: 600; padding: 7px 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--dim); cursor: pointer; font-family: inherit; }
   .rchip.active { background: var(--gold); color: var(--gold-ink); border-color: var(--gold); }
+  .date-head { position: sticky; top: 100px; z-index: 30; background: color-mix(in srgb, var(--bg) 93%, transparent); backdrop-filter: blur(6px); font-size: 12.5px; font-weight: 800; letter-spacing: .6px; text-transform: uppercase; color: var(--dim); padding: 8px 2px 6px; margin: 16px 0 10px; border-bottom: 1px solid var(--line); }
   .matchgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
-  .match { background: var(--card); border: 1px solid var(--line); border-radius: var(--r-md); padding: 13px 15px; box-shadow: var(--shadow); }
-  .match .top { display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: var(--dim); font-weight: 600; margin-bottom: 9px; text-transform: uppercase; letter-spacing: .4px; }
-  .match .top .st.live { color: var(--red); } .match .top .st.ft { color: var(--green); }
+  .match { background: var(--card); border: 1px solid var(--line); border-radius: var(--r-md); padding: 13px 15px; box-shadow: var(--shadow); overflow: hidden; }
+  .mini-banner { display: flex; justify-content: space-between; align-items: center; gap: 8px; background: var(--navy); color: #fff; margin: -13px -15px 11px; padding: 8px 15px; font-size: 10.5px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; }
+  .mini-banner .rd { color: var(--gold-soft); }
+  .mini-banner .ko { color: rgba(255,255,255,.75); font-weight: 600; }
+  .mini-banner .live { color: #ff9d9d; }
+  .mini-banner .ft { color: var(--green-soft); }
   .match .team { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; font-size: 14.5px; }
   .match .team .sc { font-weight: 800; font-variant-numeric: tabular-nums; font-size: 16px; }
   .match .team.win { font-weight: 700; } .match .team.lose { color: var(--dim); }
   .match .called { margin-top: 11px; padding-top: 10px; border-top: 1px dashed var(--line); font-size: 11.5px; color: var(--dim); }
   .match .called b { color: var(--green); }
   .match .called .av { color: var(--ink); font-weight: 600; }
+  .stakes-line { margin-top: 10px; font-size: 11.5px; color: var(--dim); background: var(--card2); border: 1px solid var(--line); border-radius: var(--r-sm); padding: 6px 10px; line-height: 1.6; }
+  .stakes-line b { color: var(--green); }
+  .stakes-toggle { margin-top: 10px; width: 100%; text-align: left; background: var(--card2); border: 1px solid var(--line); border-radius: var(--r-sm); padding: 6px 10px; font-size: 11.5px; font-weight: 700; color: var(--dim); cursor: pointer; font-family: inherit; }
+  .stakes-toggle:hover { color: var(--ink); }
+  .stakes-body { display: none; margin-top: 8px; }
+  .match.stk-open .stakes-body { display: block; }
+  .stk-out { margin-bottom: 9px; }
+  .stk-out .stk-lab { font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .4px; color: var(--ink); margin-bottom: 3px; }
+  .stk-row { display: flex; justify-content: space-between; font-size: 12px; padding: 2px 0; color: var(--dim); }
+  .stk-row b { font-variant-numeric: tabular-nums; }
 
-  /* ---- Groups ---- */
-  .groupgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 13px; }
-  .group { background: var(--card); border: 1px solid var(--line); border-radius: var(--r-md); padding: 13px 15px; box-shadow: var(--shadow); }
-  .group h3 { font-size: 13px; font-weight: 800; letter-spacing: .5px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
-  .group h3 .prog { font-size: 11px; font-weight: 600; color: var(--dim); }
-  .group h3 .prog.done { color: var(--green); }
-  .gtable { width: 100%; border-collapse: collapse; font-size: 13px; }
-  .gtable td { padding: 5px 3px; font-variant-numeric: tabular-nums; }
-  .gtable .pos { color: var(--dim); width: 18px; font-size: 11px; }
-  .gtable .tm { font-weight: 500; }
-  .gtable .num { text-align: right; color: var(--dim); width: 30px; font-size: 12px; }
-  .gtable .pt { text-align: right; font-weight: 800; width: 26px; }
-  .gtable tr.qual td { position: relative; }
-  .gtable tr.q2 { border-bottom: 2px solid var(--gold); }
-  .gtable tr.live .tm::after { content: '●'; color: var(--red); font-size: 8px; vertical-align: super; margin-left: 4px; }
-  .thirds-card { max-width: 460px; }
-  .gtable tr.q8 { border-bottom: 2px solid var(--gold); }
+  /* ---- Brackets: pick matrix ---- */
+  .matrix-scroll { overflow-x: auto; padding: 6px; margin-bottom: 8px; }
+  .mtx { border-collapse: collapse; font-size: 11.5px; }
+  .mtx th, .mtx td { padding: 6px 9px; white-space: nowrap; text-align: left; border-bottom: 1px solid var(--line); }
+  .mtx thead th { font-size: 10px; text-transform: uppercase; letter-spacing: .5px; color: var(--dim); }
+  .mtx .rowlab { position: sticky; left: 0; background: var(--card); font-weight: 700; z-index: 2; }
+  .mtx .cons { color: var(--dim); font-size: 11px; }
+  .mtx tr.grp-start th, .mtx tr.grp-start td { border-top: 2px solid var(--line); }
+  .mtx .youcol { background: var(--hl-bg); }
+  .mtx thead th.youcol { color: var(--gold); }
+  .cell-ok { background: color-mix(in srgb, var(--green) 16%, var(--card)); color: var(--green); font-weight: 600; }
+  .cell-dead { background: color-mix(in srgb, var(--red) 12%, var(--card)); color: var(--red); text-decoration: line-through; }
+  .cell-pend { color: var(--ink); }
+  .cell-warn { color: var(--red); font-weight: 700; }
 
-  /* ---- Consensus ---- */
+  /* ---- Brackets: player view ---- */
+  .pv-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; margin-bottom: 6px; }
+  .pv-g { padding: 10px 12px; }
+  .pv-g h4 { font-size: 11px; font-weight: 800; letter-spacing: .5px; text-transform: uppercase; color: var(--dim); margin-bottom: 6px; }
+  .pv-g h4 .done { color: var(--green); }
+  .pv-row { display: flex; justify-content: space-between; gap: 6px; font-size: 12px; padding: 2px 0; }
+  .pv-row .ok { color: var(--green); font-weight: 800; }
+  .pv-row .bad { color: var(--red); font-weight: 800; }
+  .pv-sec { margin: 14px 0 4px; font-size: 12px; font-weight: 800; color: var(--ink); }
+
+  /* ---- Head to head ---- */
+  .h2h-pickers { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+  .h2h-pickers select { font-family: inherit; font-size: 14px; font-weight: 600; padding: 9px 13px; border-radius: var(--r-sm); border: 1px solid var(--line); background: var(--card); color: var(--ink); cursor: pointer; max-width: 100%; }
+  .h2h-pickers .vs { font-weight: 800; color: var(--gold); }
+  .h2h-diff { font-size: 13.5px; margin-bottom: 12px; color: var(--dim); }
+  .h2h-diff b { color: var(--gold); }
+  .h2h-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .h2h-col { background: var(--card); border: 1px solid var(--line); border-radius: var(--r-md); padding: 15px; box-shadow: var(--shadow); }
+  .h2h-col h4 { font-size: 15px; font-weight: 800; margin-bottom: 3px; display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+  .h2h-col .score-line { font-size: 12.5px; color: var(--dim); margin-bottom: 13px; }
+  .h2h-col .score-line b { color: var(--green); font-size: 16px; }
+  .h2h-row { display: flex; justify-content: space-between; gap: 8px; padding: 6px 0; font-size: 13px; border-top: 1px solid var(--line); }
+  .h2h-row .k { color: var(--dim); }
+  .h2h-row .v { font-weight: 600; text-align: right; }
+  .h2h-row.same .v { color: var(--ink); } .h2h-row.diff .v { color: var(--gold); }
+  @media (max-width: 560px) { .h2h-grid { grid-template-columns: 1fr 1fr; gap: 8px; } .h2h-col { padding: 11px; } .h2h-row { font-size: 12px; } }
+
+  /* ---- Insights: badges ---- */
+  .badge-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+  .badge-card { padding: 13px 15px; }
+  .badge-card h4 { font-size: 14px; font-weight: 800; margin-bottom: 8px; display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+  .bdg { display: flex; gap: 9px; align-items: flex-start; padding: 5px 0; font-size: 12.5px; }
+  .bdg .em { font-size: 20px; line-height: 1.2; flex: 0 0 auto; }
+  .bdg .bl { font-weight: 700; }
+  .bdg .bd { color: var(--dim); font-size: 11.5px; }
+  .cons-zone { opacity: .68; margin-top: 18px; }
+  .cons-zone h3 { font-size: 13px; font-weight: 700; color: var(--dim); margin-bottom: 8px; font-style: italic; }
+  .cons-zone .inner-list { padding: 4px 15px 10px; }
+
+  /* ---- Insights: consensus ---- */
   .cons-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
   @media (max-width: 760px) { .cons-grid { grid-template-columns: 1fr; } }
   .cons-card { padding: 16px 18px; }
@@ -193,35 +278,29 @@
   .crow .track i { height: 100%; display: block; background: linear-gradient(90deg, var(--gold), var(--gold-soft)); border-radius: 6px; min-width: 2px; transition: width .5s ease; }
   .crow .track .who-list { position: absolute; left: 9px; top: 0; height: 100%; display: flex; align-items: center; font-size: 11px; font-weight: 600; color: var(--gold-ink); }
 
-  /* ---- Head to head ---- */
-  .h2h-pickers { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
-  .h2h-pickers select { font-family: inherit; font-size: 14px; font-weight: 600; padding: 9px 13px; border-radius: var(--r-sm); border: 1px solid var(--line); background: var(--card); color: var(--ink); cursor: pointer; }
-  .h2h-pickers .vs { font-weight: 800; color: var(--gold); }
-  .h2h-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-  .h2h-col { background: var(--card); border: 1px solid var(--line); border-radius: var(--r-md); padding: 15px; box-shadow: var(--shadow); }
-  .h2h-col h4 { font-size: 15px; font-weight: 800; margin-bottom: 3px; display: flex; align-items: center; gap: 7px; }
-  .h2h-col .score-line { font-size: 12.5px; color: var(--dim); margin-bottom: 13px; }
-  .h2h-col .score-line b { color: var(--green); font-size: 16px; }
-  .h2h-row { display: flex; justify-content: space-between; gap: 8px; padding: 6px 0; font-size: 13px; border-top: 1px solid var(--line); }
-  .h2h-row .k { color: var(--dim); }
-  .h2h-row .v { font-weight: 600; text-align: right; }
-  .h2h-row.same .v { color: var(--ink); } .h2h-row.diff .v { color: var(--gold); }
-  @media (max-width: 560px) { .h2h-grid { grid-template-columns: 1fr 1fr; gap: 8px; } .h2h-col { padding: 11px; } .h2h-row { font-size: 12px; } }
+  /* ---- Insights: similar brackets ---- */
+  .sim-card { padding: 14px 18px; }
+  .sim-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; font-size: 13px; border-top: 1px solid var(--line); }
+  .sim-row:first-child { border-top: none; }
+  .sim-row .names { font-weight: 600; }
+  .sim-bar { flex: 1; max-width: 160px; margin-left: auto; height: 8px; border-radius: 99px; background: var(--faint); overflow: hidden; }
+  .sim-bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--gold), var(--gold-soft)); }
+  .sim-row .pct { font-weight: 800; color: var(--gold); font-variant-numeric: tabular-nums; width: 44px; text-align: right; }
 
+  /* ---- Scoring guide / footer ---- */
+  .scoring { background: var(--card); border: 1px solid var(--line); border-radius: var(--r-md); padding: 16px 20px; font-size: 13px; color: var(--dim); line-height: 1.7; box-shadow: var(--shadow); }
+  .scoring b { color: var(--ink); }
   footer { border-top: 1px solid var(--line); margin-top: 40px; padding: 26px 0 50px; }
-  footer .scoring { background: var(--card); border: 1px solid var(--line); border-radius: var(--r-md); padding: 16px 20px; font-size: 13px; color: var(--dim); line-height: 1.7; box-shadow: var(--shadow); }
-  footer .scoring b { color: var(--ink); }
-  footer .meta { text-align: center; font-size: 12px; color: var(--dim); margin-top: 16px; }
-  .skeleton { color: var(--dim); text-align: center; padding: 50px 0; font-size: 14px; }
+  footer .meta { text-align: center; font-size: 12px; color: var(--dim); }
 </style>
 </head>
 <body>
 <nav>
   <div class="inner">
-    <div class="brand"><span class="logo">⚽</span> <span>Sp Jain Friends</span> <span class="full" style="color:var(--gold);font-weight:700">· Live Pool</span></div>
+    <div class="brand"><span class="logo">⚽</span> <span>FIFA Prediction Pro</span></div>
     <div class="spacer"></div>
     <a class="navbtn hide-sm" href="https://www.fifaprediction.online/pools/27007c25-b9ff-4687-97d6-c0781422f3aa" target="_blank" rel="noopener">Official pool ↗</a>
-    <button class="navbtn" id="digestBtn">📋 <span class="hide-sm">Digest</span></button>
+    <button class="navbtn" id="recapBtn">📲 <span class="hide-sm">Recap</span></button>
     <button class="navbtn" id="themeBtn" title="Toggle theme">🌙</button>
   </div>
 </nav>
@@ -231,67 +310,67 @@
   <div class="inner">
     <span class="eyebrow"><span class="live-dot"></span> Private Pool · Live</span>
     <h1>Sp Jain Friends</h1>
-    <p class="sub">Real-time World Cup 2026 leaderboard, synced with live match results. An unofficial live companion to the <a href="https://www.fifaprediction.online/pools/27007c25-b9ff-4687-97d6-c0781422f3aa" target="_blank" rel="noopener">official pool</a> — brackets locked 11 Jun 2026.</p>
+    <p class="sub">FIFA Prediction Pro — the live World Cup 2026 companion for your locked brackets, synced with real match results. Mirrors the <a href="https://www.fifaprediction.online/pools/27007c25-b9ff-4687-97d6-c0781422f3aa" target="_blank" rel="noopener">official pool</a> · locked 11 Jun 2026.</p>
     <div class="statusbar">
       <span class="pill" id="updated">Loading…</span>
       <span class="pill live" id="livepill" style="display:none"><span class="live-dot"></span> <span id="liveTxt">LIVE</span></span>
       <span class="pill" id="countdown" style="display:none"></span>
       <button class="btn gold" id="refreshBtn">↻ Refresh</button>
-      <button class="btn ghost" id="digestBtn2">📋 Copy WhatsApp digest</button>
+      <button class="btn ghost" id="digestBtn">📋 Copy digest</button>
     </div>
   </div>
 </header>
 
 <div class="tabs">
   <div class="inner" id="tabbar">
-    <button class="tab active" data-tab="leaderboard">Leaderboard</button>
+    <button class="tab active" data-tab="home">Home</button>
     <button class="tab" data-tab="matches">Matches <span class="badge" id="mBadge"></span></button>
-    <button class="tab" data-tab="groups">Groups</button>
-    <button class="tab" data-tab="consensus">Pool Insights</button>
-    <button class="tab" data-tab="h2h">Head-to-Head</button>
+    <button class="tab" data-tab="leaderboard">Leaderboard</button>
+    <button class="tab" data-tab="brackets">Brackets</button>
+    <button class="tab" data-tab="insights">Insights</button>
   </div>
 </div>
 
 <div class="err wrap" id="err"></div>
 
 <main class="wrap">
-  <section class="panel active" data-panel="leaderboard">
-    <div id="podium" class="podium"></div>
-    <h2 class="sec">Standings</h2>
-    <p class="sec-lead">Ranked by projected points · tap any player for their full breakdown and bracket.</p>
-    <div class="lb" id="lb"><div class="skeleton">Loading live standings…</div></div>
+  <section class="panel active" data-panel="home">
+    <div class="status-strip" id="statusCards"></div>
+    <h2 class="sec">Today &amp; Live</h2>
+    <p class="sec-lead">Every match that matters right now, with what it does to the pool.</p>
+    <div class="matchgrid" id="todayLive"><div class="skeleton">Loading live matches…</div></div>
+    <h2 class="sec mt">Rooting Guide</h2>
+    <p class="sec-lead">The next kickoffs — and which result moves <i>your</i> title odds.</p>
+    <div class="root-grid" id="rooting"><div class="skeleton">Warming up the simulator…</div></div>
+    <div class="card recap-strip" id="recapStrip" style="display:none"></div>
+    <div style="margin-top:20px"><button class="btn gold" id="homeRecapBtn">📲 Share WhatsApp recap</button></div>
   </section>
 
   <section class="panel" data-panel="matches">
     <h2 class="sec">Fixtures &amp; Results</h2>
-    <p class="sec-lead">Live and recent matches, with how the pool called each one.</p>
+    <p class="sec-lead">Live and recent matches, how the pool called each one, and the stakes on what's next.</p>
     <div class="roundbar" id="roundbar"></div>
-    <div class="matchgrid" id="matchgrid"></div>
+    <div id="matchwrap"><div class="skeleton">Loading fixtures…</div></div>
   </section>
 
-  <section class="panel" data-panel="groups">
-    <h2 class="sec">Live Group Tables</h2>
-    <p class="sec-lead">Top 2 of each group advance (gold line); 8 best third-placed teams also go through.</p>
-    <div class="groupgrid" id="groupgrid"></div>
-    <h2 class="sec" style="margin-top:26px">Third-Place Race</h2>
-    <p class="sec-lead">The 8 best third-placed teams advance to the Round of 32.</p>
-    <div class="group thirds-card"><table class="gtable" id="thirds"></table></div>
+  <section class="panel" data-panel="leaderboard">
+    <div id="podium" class="podium"></div>
+    <h2 class="sec">Standings</h2>
+    <p class="sec-lead">Ranked by projected points · tap any player for their full breakdown.</p>
+    <div class="lb" id="lb"><div class="skeleton">Loading live standings…</div></div>
   </section>
 
-  <section class="panel" data-panel="consensus">
-    <h2 class="sec">Pool Insights</h2>
-    <p class="sec-lead">Where the 10 of you agree — and where someone's going it alone.</p>
-    <div class="cons-grid">
-      <div class="cons-card card"><h3>👑 Champion picks</h3><div id="consChampion"></div></div>
-      <div class="cons-card card"><h3>🥈 Runner-up picks</h3><div id="consRunner"></div></div>
-      <div class="cons-card card"><h3>🚀 Most-backed to reach the semis</h3><div id="consSemis"></div></div>
-      <div class="cons-card card"><h3>🎯 Boldest calls <span style="font-weight:400;color:var(--dim);font-size:12px">— picked by only one</span></h3><div id="consBold"></div></div>
-    </div>
-  </section>
-
-  <section class="panel" data-panel="h2h">
-    <h2 class="sec">Head-to-Head</h2>
+  <section class="panel" data-panel="brackets">
+    <h2 class="sec">Pick Matrix</h2>
+    <p class="sec-lead">All ten brackets side by side — green is banked, red is dead, 🐺 marks a lone-wolf call.</p>
+    <div class="card matrix-scroll"><table class="mtx" id="matrix"></table></div>
+    <h2 class="sec mt">Player View</h2>
+    <p class="sec-lead">One full bracket, group by group.</p>
+    <div class="h2h-pickers"><select id="pvSel"></select></div>
+    <div id="playerView"><div class="skeleton">Loading bracket…</div></div>
+    <h2 class="sec mt">Head-to-Head</h2>
     <p class="sec-lead">Compare any two brackets side by side.</p>
+    <div class="h2h-diff" id="h2hDiff"></div>
     <div class="h2h-pickers">
       <select id="h2hA"></select>
       <span class="vs">VS</span>
@@ -299,369 +378,47 @@
     </div>
     <div class="h2h-grid" id="h2hGrid"></div>
   </section>
+
+  <section class="panel" data-panel="insights">
+    <h2 class="sec">Badges</h2>
+    <p class="sec-lead">Earned the hard way, one matchday at a time.</p>
+    <div class="badge-grid" id="badges"><div class="skeleton">Counting trophies…</div></div>
+    <div class="cons-zone" id="badgesCons" style="display:none">
+      <h3>Something went horribly wrong. But hey, at least it's a badge.</h3>
+      <div class="card inner-list" id="badgesConsList"></div>
+    </div>
+    <h2 class="sec mt">Pool Consensus</h2>
+    <p class="sec-lead">Where the 10 of you agree — and where someone's going it alone.</p>
+    <div class="cons-grid">
+      <div class="cons-card card"><h3>👑 Champion picks</h3><div id="consChampion"></div></div>
+      <div class="cons-card card"><h3>🥈 Runner-up picks</h3><div id="consRunner"></div></div>
+      <div class="cons-card card"><h3>🚀 Most-backed to reach the semis</h3><div id="consSemis"></div></div>
+      <div class="cons-card card"><h3>🎯 Boldest calls <span style="font-weight:400;color:var(--dim);font-size:12px">— picked by only one</span></h3><div id="consBold"></div></div>
+    </div>
+    <h2 class="sec mt">Most Similar Brackets</h2>
+    <p class="sec-lead">Top 5 pairs by share of identical picks across champion, finalists, semis, quarters, R16, thirds and group winners.</p>
+    <div class="card sim-card" id="similar"></div>
+    <h2 class="sec mt">Scoring Guide</h2>
+    <div class="scoring">
+      <b>How scoring works</b> (mirrors the official pool, max 470 pts) —
+      Groups: 3 pts per correct advancing team · +4 per exact group position · 3 pts per correct third-place group.
+      Knockouts: Round-of-32 winners 3 · Round-of-16 winners 4 · Quarterfinal winners 5 · Runner-up 8 · Champion 50.<br>
+      <b>Projected</b> scores groups as if today's live tables were final, so it moves with every goal.
+      <b>Official</b> follows the pool site's rule — group points settle once all groups finish — and stays the canonical score for settling.<br>
+      <b>Matchday Crown</b> 👑 — most points scored inside each window: R1 (11–18 Jun), R2 (19–24 Jun), R3 (25–28 Jun), then R32, R16, QF, SF and the Finals.
+      <b>Win%</b> comes from Monte Carlo simulation of the remaining tournament using Elo ratings.
+    </div>
+  </section>
 </main>
 
 <footer class="wrap">
-  <div class="scoring">
-    <b>How scoring works</b> (mirrors the official pool, max 470 pts) —
-    Groups: 3 pts per correct advancing team · +4 per exact group position · 3 pts per correct third-place group.
-    Knockouts: Round-of-32 winners 3 · Round-of-16 winners 4 · Quarterfinal winners 5 · Runner-up 8 · Champion 50.<br>
-    <b>Projected</b> scores groups as if today's live tables were final, so it moves with every goal.
-    <b>Official</b> follows the pool site's rule — group points settle once all groups finish — and stays the canonical score for settling.
-  </div>
-  <div class="meta">Live results via ESPN · auto-refreshes every 60s · built as a live companion to fifaprediction.online</div>
+  <div class="meta">FIFA Prediction Pro · live results via ESPN · auto-refreshes every 60s · built as a live companion to fifaprediction.online</div>
 </footer>
 
 <script src="data.js"></script>
 <script src="engine.js"></script>
-<script>
-(function () {
-  const FLAGS = {
-    'Mexico':'🇲🇽','South Korea':'🇰🇷','Czech Rep.':'🇨🇿','South Africa':'🇿🇦','Canada':'🇨🇦',
-    'Bosnia & Herz.':'🇧🇦','Qatar':'🇶🇦','Switzerland':'🇨🇭','Brazil':'🇧🇷','Morocco':'🇲🇦',
-    'Haiti':'🇭🇹','Scotland':'🏴󠁧󠁢󠁳󠁣󠁴󠁿','United States':'🇺🇸','Paraguay':'🇵🇾','Australia':'🇦🇺',
-    'Turkey':'🇹🇷','Germany':'🇩🇪','Curacao':'🇨🇼','Ivory Coast':'🇨🇮','Ecuador':'🇪🇨',
-    'Netherlands':'🇳🇱','Japan':'🇯🇵','Sweden':'🇸🇪','Tunisia':'🇹🇳','Belgium':'🇧🇪',
-    'Egypt':'🇪🇬','Iran':'🇮🇷','New Zealand':'🇳🇿','Spain':'🇪🇸','Cape Verde':'🇨🇻',
-    'Saudi Arabia':'🇸🇦','Uruguay':'🇺🇾','France':'🇫🇷','Senegal':'🇸🇳','Iraq':'🇮🇶',
-    'Norway':'🇳🇴','Argentina':'🇦🇷','Algeria':'🇩🇿','Austria':'🇦🇹','Jordan':'🇯🇴',
-    'Portugal':'🇵🇹','DR Congo':'🇨🇩','Uzbekistan':'🇺🇿','Colombia':'🇨🇴','England':'🏴󠁧󠁢󠁥󠁮󠁧󠁿',
-    'Croatia':'🇭🇷','Ghana':'🇬🇭','Panama':'🇵🇦',
-  };
-  let LOGOS = {};
-  const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const flag = t => {
-    const url = LOGOS[t];
-    if (url && /^https:\/\/a\.espncdn\.com\/[\w./-]+$/.test(url)) return `<img class="fl" src="${esc(url)}" alt="" loading="lazy">`;
-    return `<span class="fl-e">${FLAGS[t] || '🏳️'}</span>`;
-  };
-  const teamHtml = t => `${flag(t)} ${esc(t)}`;
-  const $ = id => document.getElementById(id);
-
-  const ESPN_URL = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=20260611-20260719&limit=200';
-  const FIFA_URL = 'https://api.fifa.com/api/v3/calendar/matches?idSeason=285023&idCompetition=17&language=en&count=200';
-  const ROUND_LABELS = { group: 'Group Stage', r32: 'Round of 32', r16: 'Round of 16', qf: 'Quarterfinals', sf: 'Semifinals', third: '3rd-Place', final: 'Final' };
-
-  let lastGood = null, lastRows = null, openNames = new Set(), activeRound = 'all', secs = 60, inFlight = false;
-
-  /* ---------- theme ---------- */
-  const themeBtn = $('themeBtn');
-  function setTheme(t) {
-    document.documentElement.setAttribute('data-theme', t);
-    themeBtn.textContent = t === 'dark' ? '☀️' : '🌙';
-    try { localStorage.setItem('wc26-theme', t); } catch (e) {}
-  }
-  (function initTheme() {
-    let t = 'light';
-    try { t = localStorage.getItem('wc26-theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'); } catch (e) {}
-    setTheme(t);
-  })();
-  themeBtn.onclick = () => setTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
-
-  /* ---------- tabs ---------- */
-  $('tabbar').addEventListener('click', e => {
-    const t = e.target.closest('.tab'); if (!t) return;
-    document.querySelectorAll('.tab').forEach(x => x.classList.toggle('active', x === t));
-    const name = t.dataset.tab;
-    document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.dataset.panel === name));
-  });
-
-  /* ---------- data fetch ---------- */
-  async function fetchMatches() {
-    const opts = () => ({ cache: 'no-store', signal: AbortSignal.timeout ? AbortSignal.timeout(15000) : undefined });
-    try {
-      const r = await fetch(ESPN_URL, opts());
-      if (!r.ok) throw new Error('ESPN HTTP ' + r.status);
-      const m = Engine.parseEspn(await r.json());
-      if (m.length < 50) throw new Error('ESPN returned too few matches');
-      return m;
-    } catch (e1) {
-      const r = await fetch(FIFA_URL, opts());
-      if (!r.ok) throw new Error('Both feeds failed (FIFA HTTP ' + r.status + ')');
-      const m = Engine.parseFifa(await r.json());
-      if (m.length < 50) throw new Error('Both feeds failed');
-      return m;
-    }
-  }
-
-  const fmtTime = d => new Date(d).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' });
-  const isYou = n => /TARS/.test(n);
-
-  /* ---------- podium + leaderboard ---------- */
-  const CATS = [
-    ['posBonus', 'Exact group positions', 192], ['advancing', 'Advancing teams', 96],
-    ['thirdPlace', '3rd-place groups', 24], ['r32w', 'R32 winners', 48],
-    ['r16w', 'R16 winners', 32], ['qfw', 'QF winners', 20],
-    ['runnerUp', 'Runner-up', 8], ['champion', 'Champion', 50],
-  ];
-
-  function renderPodium(rows) {
-    const top = rows.slice(0, 3);
-    const order = [top[1], top[0], top[2]].filter(Boolean); // 2nd, 1st, 3rd
-    $('podium').innerHTML = order.map(r => {
-      const medal = ['🥇', '🥈', '🥉'][r.rank - 1];
-      return `<div class="card pod ${r.rank === 1 ? 'p1' : ''}">
-        <div class="medal">${medal}</div>
-        <div>
-          <div class="nm">${esc(r.name)}</div>
-          <div class="ch">👑 ${teamHtml(r.champion)}</div>
-        </div>
-        <div class="pts">${r.projected}</div>
-      </div>`;
-    }).join('');
-  }
-
-  function renderLb(rows, byName, state) {
-    const prev = lastRows ? Object.fromEntries(lastRows.map(r => [r.name, r.rank])) : null;
-    $('lb').innerHTML = rows.map(r => {
-      const e = byName[r.name];
-      const medal = r.rank <= 3 ? ['🥇', '🥈', '🥉'][r.rank - 1] : r.rank;
-      const d = prev && prev[r.name] && prev[r.name] !== r.rank
-        ? (prev[r.name] > r.rank ? `<span class="delta up">▲${prev[r.name] - r.rank}</span>` : `<span class="delta dn">▼${r.rank - prev[r.name]}</span>`) : '';
-      const lockedPct = Math.round(r.official / 470 * 100);
-      const projPct = Math.round((r.projected - r.official) / 470 * 100);
-      const cats = CATS.map(([k, label, max]) =>
-        `<div class="cat"><span>${label}</span><b>${r.projectedBr[k]}<span class="of">/${max}</span></b></div>`).join('');
-      const chips = list => list.map(t => `<span class="chip2 ${state.eliminated.has(t) ? 'out' : ''}">${teamHtml(t)}</span>`).join('');
-      const champClass = r.championAlive ? 'alivetag' : 'outtag';
-      return `<div class="entry ${isYou(r.name) ? 'you' : ''} ${openNames.has(r.name) ? 'open' : ''}" data-name="${esc(r.name)}">
-        <div class="entry-head">
-          <div class="rank">${medal}</div>
-          <div class="who">
-            <div class="nm">${esc(r.name)}${isYou(r.name) ? '<span class="youtag">YOU</span>' : ''}${d}</div>
-            <div class="ch">👑 <span class="${r.championAlive ? '' : 'dead'}">${teamHtml(r.champion)}</span> · <span class="${champClass}">${r.championAlive ? 'still in' : 'eliminated −50'}</span></div>
-          </div>
-          <div class="nums">
-            <div class="col"><div class="big">${r.projected}</div><div class="lbl">Projected</div></div>
-            <div class="col"><div class="small">${r.official}</div><div class="lbl">Official</div></div>
-            <div class="col max-col"><div class="small">${r.max}</div><div class="lbl">Max</div></div>
-            <div class="chev">▼</div>
-          </div>
-        </div>
-        <div class="detail">
-          <div class="barwrap">
-            <div class="toprow"><span>Points secured vs. projected</span><span>${r.official} locked · ${r.projected} projected · ${r.max} ceiling</span></div>
-            <div class="bar"><i class="locked" style="width:${lockedPct}%"></i><i class="proj" style="width:${projPct}%"></i></div>
-          </div>
-          <div class="cats">${cats}</div>
-          <div class="picks">
-            <span class="lab">Final:</span> ${teamHtml(e.champion)} over ${teamHtml(e.runnerUp)} &nbsp;·&nbsp;
-            <span class="lab">Semis:</span> ${chips(e.sf)}<br>
-            <span class="lab">Quarters:</span> ${chips(e.qf)}<br>
-            <span class="lab">Reaches R16:</span> ${chips(e.r16)}
-          </div>
-        </div>
-      </div>`;
-    }).join('');
-    $('lb').querySelectorAll('.entry-head').forEach(el => {
-      el.onclick = () => {
-        const box = el.parentElement, n = box.dataset.name;
-        box.classList.toggle('open');
-        box.classList.contains('open') ? openNames.add(n) : openNames.delete(n);
-      };
-    });
-  }
-
-  /* ---------- matches with "who called it" ---------- */
-  function whoCalled(match, state) {
-    // For a finished/live match, which players' brackets had the winner advancing past this stage.
-    if (!match.home || !match.away) return null;
-    const winner = match.state === 'in'
-      ? (isNaN(match.hs) ? null : match.hs > match.as ? match.home : match.hs < match.as ? match.away : null)
-      : (match.homeWinner ? match.home : match.awayWinner ? match.away : null);
-    if (!winner) return null;
-    let predicted;
-    if (match.round === 'group') {
-      // who had this team finishing top-2 (or predicted-third) in its group
-      predicted = POOL.entries.filter(e => Engine.predictedAdvancers(e).has(winner)).map(e => e.name);
-    } else {
-      const key = { r32: 'r16', r16: 'qf', qf: 'sf' }[match.round];
-      if (key) predicted = POOL.entries.filter(e => e[key].includes(winner)).map(e => e.name);
-      else if (match.round === 'final') predicted = POOL.entries.filter(e => e.champion === winner).map(e => e.name);
-      else predicted = [];
-    }
-    return { winner, predicted };
-  }
-
-  function renderRoundbar(state) {
-    const present = ['all'];
-    for (const r of ['group', 'r32', 'r16', 'qf', 'sf', 'third', 'final'])
-      if (state.matches.some(m => m.round === r && m.home && m.away)) present.push(r);
-    $('roundbar').innerHTML = present.map(r =>
-      `<button class="rchip ${activeRound === r ? 'active' : ''}" data-r="${r}">${r === 'all' ? 'Recent &amp; Live' : ROUND_LABELS[r]}</button>`).join('');
-    $('roundbar').querySelectorAll('.rchip').forEach(c => c.onclick = () => { activeRound = c.dataset.r; renderMatches(lastGood); renderRoundbar(lastGood); });
-  }
-
-  function renderMatches(state) {
-    const now = Date.now(), DAY = 86400e3;
-    let list = state.matches.filter(m => m.home && m.away);
-    if (activeRound === 'all') {
-      list = list.filter(m => m.state === 'in' || (new Date(m.date) > now - 1.3 * DAY && new Date(m.date) < now + 1.6 * DAY));
-      list.sort((a, b) => (a.state === 'in' ? 0 : 1) - (b.state === 'in' ? 0 : 1) || new Date(a.date) - new Date(b.date));
-    } else {
-      list = list.filter(m => m.round === activeRound).sort((a, b) => new Date(a.date) - new Date(b.date));
-    }
-    $('matchgrid').innerHTML = list.map(m => {
-      const st = m.state === 'in' ? `<span class="st live">● ${esc(m.clock || 'LIVE')}</span>`
-        : m.completed ? '<span class="st ft">Full time</span>' : esc(fmtTime(m.date));
-      const showSc = !(m.state === 'pre' || isNaN(m.hs));
-      const cls = side => !m.completed ? '' : (side === 'h' ? (m.hs > m.as ? 'win' : m.hs < m.as ? 'lose' : '') : (m.as > m.hs ? 'win' : m.as < m.hs ? 'lose' : ''));
-      const called = whoCalled(m, state);
-      let calledHtml = '';
-      if (called && called.predicted.length) {
-        const names = called.predicted.map(n => isYou(n) ? 'you' : n.split(' ')[0]);
-        const shown = names.slice(0, 4).join(', ') + (names.length > 4 ? ` +${names.length - 4}` : '');
-        calledHtml = `<div class="called"><b>${called.predicted.length}/10</b> backed ${teamHtml(called.winner)} — <span class="av">${esc(shown)}</span></div>`;
-      } else if (called) {
-        calledHtml = `<div class="called">Nobody backed ${teamHtml(called.winner)} 😬</div>`;
-      }
-      const grp = m.round === 'group' ? 'Group ' + (Engine.TEAM_GROUP[m.home] || '') : ROUND_LABELS[m.round];
-      return `<div class="match">
-        <div class="top"><span>${esc(grp)}</span>${st}</div>
-        <div class="team ${cls('h')}"><span>${teamHtml(m.home)}</span><span class="sc">${showSc ? m.hs : ''}</span></div>
-        <div class="team ${cls('a')}"><span>${teamHtml(m.away)}</span><span class="sc">${showSc ? m.as : ''}</span></div>
-        ${calledHtml}
-      </div>`;
-    }).join('') || '<div class="skeleton">No matches in this view.</div>';
-
-    const liveCount = state.matches.filter(m => m.state === 'in').length;
-    $('livepill').style.display = liveCount ? '' : 'none';
-    $('liveTxt').textContent = liveCount + ' LIVE';
-    $('mBadge').textContent = liveCount ? liveCount + ' live' : '';
-  }
-
-  /* ---------- groups ---------- */
-  function renderGroups(state) {
-    $('groupgrid').innerHTML = Object.entries(state.liveTables).map(([g, t]) => {
-      const rows = t.order.map((r, i) => `<tr class="qual ${i === 1 ? 'q2' : ''} ${r.live ? 'live' : ''}">
-        <td class="pos">${i + 1}</td><td class="tm">${teamHtml(r.team)}</td>
-        <td class="num">${r.played}</td><td class="num">${r.gd > 0 ? '+' : ''}${r.gd}</td><td class="pt">${r.pts}</td>
-      </tr>`).join('');
-      return `<div class="group"><h3><span>Group ${g}</span><span class="prog ${t.complete ? 'done' : ''}">${t.complete ? '✓ complete' : t.playedMatches + '/6'}</span></h3>
-        <table class="gtable"><thead><tr style="font-size:10px;color:var(--dim);text-transform:uppercase"><td></td><td>Team</td><td class="num">P</td><td class="num">GD</td><td class="pt">Pts</td></tr></thead>${rows}</table></div>`;
-    }).join('');
-    $('thirds').innerHTML = `<thead><tr style="font-size:10px;color:var(--dim);text-transform:uppercase"><td></td><td>Grp</td><td>Team</td><td class="num">GD</td><td class="pt">Pts</td></tr></thead>` +
-      state.thirdTableLive.map((r, i) => `<tr class="qual ${i === 7 ? 'q8' : ''}">
-        <td class="pos">${i + 1}</td><td class="pos">${esc(r.group)}</td><td class="tm">${teamHtml(r.team)}</td>
-        <td class="num">${r.gd > 0 ? '+' : ''}${r.gd}</td><td class="pt">${r.pts}</td></tr>`).join('');
-  }
-
-  /* ---------- consensus / pool insights ---------- */
-  function tally(getList) {
-    const m = {};
-    for (const e of POOL.entries) for (const t of [].concat(getList(e))) (m[t] = m[t] || []).push(e.name);
-    return Object.entries(m).sort((a, b) => b[1].length - a[1].length);
-  }
-  function renderConsensus(state) {
-    const bar = (entries, showNames) => entries.map(([team, names]) => {
-      const pct = Math.round(names.length / POOL.entries.length * 100);
-      const dead = state.eliminated.has(team);
-      return `<div class="crow">
-        <div class="lab"><span>${teamHtml(team)}${dead ? ' <span style="color:var(--red)">(out)</span>' : ''}</span><span class="cnt">${names.length}/10</span></div>
-        <div class="track"><i style="width:${Math.max(pct, 6)}%"></i>${showNames ? `<span class="who-list">${pct >= 22 ? esc(names.map(n => isYou(n) ? 'you' : n.split(' ')[0]).slice(0, 3).join(', ')) : ''}</span>` : ''}</div>
-      </div>`;
-    }).join('');
-    $('consChampion').innerHTML = bar(tally(e => e.champion), true);
-    $('consRunner').innerHTML = bar(tally(e => e.runnerUp), true);
-    $('consSemis').innerHTML = bar(tally(e => e.sf).slice(0, 6), false);
-    const bold = tally(e => e.sf).filter(([, names]) => names.length === 1)
-      .map(([team, names]) => `<div class="crow"><div class="lab"><span>${teamHtml(team)} to reach semis</span><span class="cnt">only ${esc(names[0].split(' ')[0])}</span></div></div>`).join('')
-      || '<div class="sec-lead">Everyone\'s semifinal picks overlap — no lone-wolf calls.</div>';
-    $('consBold').innerHTML = bold;
-  }
-
-  /* ---------- head to head ---------- */
-  function fillPickers() {
-    const opts = POOL.entries.map((e, i) => `<option value="${i}">${esc(e.name)}</option>`).join('');
-    $('h2hA').innerHTML = opts; $('h2hB').innerHTML = opts;
-    const me = POOL.entries.findIndex(e => isYou(e.name));
-    $('h2hA').value = me >= 0 ? me : 0;
-    $('h2hB').value = me === 0 ? 1 : 0;
-    $('h2hA').onchange = $('h2hB').onchange = () => renderH2H(lastGood, lastRows);
-  }
-  function renderH2H(state, rows) {
-    if (!state || !rows) return;
-    const a = POOL.entries[+$('h2hA').value], b = POOL.entries[+$('h2hB').value];
-    const rowOf = n => rows.find(r => r.name === n) || {};
-    const col = (e) => {
-      const r = rowOf(e.name);
-      const fields = [
-        ['Champion', teamHtml(e.champion)],
-        ['Runner-up', teamHtml(e.runnerUp)],
-        ['Semifinalists', e.sf.map(teamHtml).join(', ')],
-        ['Reaches QF', e.qf.map(t => t.split(' ')[0]).map(esc).join(', ')],
-      ];
-      return { e, r, fields };
-    };
-    const ca = col(a), cb = col(b);
-    const rowsHtml = ca.fields.map((f, i) => {
-      const same = f[1] === cb.fields[i][1];
-      return `<div class="h2h-row ${same ? 'same' : 'diff'}"><span class="k">${f[0]}</span></div>`;
-    });
-    const mkCol = (c) => `<div class="h2h-col ${isYou(c.e.name) ? 'you' : ''}">
-      <h4>${esc(c.e.name)}${isYou(c.e.name) ? '<span class="youtag">YOU</span>' : ''}</h4>
-      <div class="score-line"><b>${c.r.projected ?? '–'}</b> projected · ${c.r.official ?? 0} official · max ${c.r.max ?? '–'}</div>
-      ${c.fields.map((f, i) => {
-        const same = f[1] === (c === ca ? cb : ca).fields[i][1];
-        return `<div class="h2h-row ${same ? 'same' : 'diff'}"><span class="k">${esc(f[0])}</span><span class="v">${f[1]}</span></div>`;
-      }).join('')}
-    </div>`;
-    $('h2hGrid').innerHTML = mkCol(ca) + mkCol(cb);
-  }
-
-  /* ---------- digest ---------- */
-  function digest(rows, state) {
-    const today = state.matches.filter(m => m.completed && m.home && Date.now() - new Date(m.date) < 1.3 * 86400e3)
-      .map(m => `${m.home} ${m.hs}-${m.as} ${m.away}`);
-    const d = new Date();
-    return [
-      `⚽ *Sp Jain Friends — WC26 Pool* (${d.toLocaleDateString([], { day: 'numeric', month: 'short' })})`, '',
-      ...rows.map(r => `${r.rank <= 3 ? ['🥇', '🥈', '🥉'][r.rank - 1] : r.rank + '.'} ${r.name} — *${r.projected}* (max ${r.max})${r.championAlive ? '' : ' 👑❌'}`), '',
-      today.length ? '🔥 ' + today.join(' · ') : '', '',
-      '📊 Live board: ' + location.href,
-      '_projected pts — official group scoring settles when groups finish_',
-    ].filter((l, i, a) => l !== '' || a[i - 1] !== '').join('\n');
-  }
-  async function copyDigest() {
-    if (!lastRows || !lastGood) return;
-    const text = digest(lastRows, lastGood);
-    try { await navigator.clipboard.writeText(text); flash('✅ Copied!'); }
-    catch { prompt('Copy the digest:', text); }
-  }
-  function flash(msg) {
-    [$('digestBtn'), $('digestBtn2')].forEach(b => { const o = b.dataset.orig || b.innerHTML; b.dataset.orig = o; b.innerHTML = msg; setTimeout(() => b.innerHTML = o, 1800); });
-  }
-  $('digestBtn').onclick = copyDigest; $('digestBtn2').onclick = copyDigest;
-
-  /* ---------- main refresh ---------- */
-  async function refresh() {
-    if (inFlight) return;
-    inFlight = true; secs = 60;
-    try {
-      const matches = await fetchMatches();
-      const state = Engine.buildState(matches);
-      if (Object.keys(state.logos).length >= 40) LOGOS = state.logos;
-      const rows = Engine.leaderboard(POOL.entries, state);
-      const byName = Object.fromEntries(POOL.entries.map(e => [e.name, e]));
-      renderPodium(rows); renderLb(rows, byName, state);
-      renderRoundbar(state); renderMatches(state);
-      renderGroups(state); renderConsensus(state);
-      renderH2H(state, rows);
-      lastGood = state; lastRows = rows;
-      $('err').style.display = 'none';
-      $('updated').textContent = '✓ Updated ' + new Date().toLocaleTimeString();
-      $('countdown').style.display = '';
-    } catch (e) {
-      $('err').textContent = 'Could not reach the live results feed (' + e.message + '). ' + (lastGood ? 'Showing last good data.' : 'Retrying shortly.');
-      $('err').style.display = 'block';
-    } finally { inFlight = false; secs = 60; }
-  }
-
-  $('refreshBtn').onclick = refresh;
-  fillPickers();
-  setInterval(() => { secs--; $('countdown').textContent = '↻ ' + Math.max(secs, 0) + 's'; if (secs <= 0) refresh(); }, 1000);
-  refresh();
-})();
-</script>
+<script src="ratings.js"></script>
+<script src="mc.js"></script>
+<script src="app.js"></script>
 </body>
 </html>

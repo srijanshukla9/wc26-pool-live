@@ -1,0 +1,12 @@
+{
+  "name": "FIFA Prediction Pro",
+  "short_name": "FIFA Pro",
+  "description": "Live WC2026 leaderboard for the Sp Jain Friends pool",
+  "display": "standalone",
+  "start_url": ".",
+  "background_color": "#0a1828",
+  "theme_color": "#0a1828",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
