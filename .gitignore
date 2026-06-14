@@ -1,3 +1,5 @@
-# raw pool snapshot contains internal user ids — never publish
+# raw pool snapshots contain internal user ids — never publish
 pool-snapshot.json
+open-pool-snapshot.json
 reduce.mjs
+reduce-multi.mjs
