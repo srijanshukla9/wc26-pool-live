@@ -1,15 +1,15 @@
 /* FIFA Prediction Pro — app.js
-   UI logic for the multi-pool WC26 companion (broadcast design v1.0).
-   Loads after data.js, engine.js, ratings.js, viz.js, mc.js.
+   ONE-SCREEN dashboard (spec v2.0). Loads after data.js, engine.js, ratings.js, viz.js, mc.js.
 
    data.js exposes globals: POOLS, POOL_ORDER, POOL (active, chosen from
    location.hash '#pool=<key>', defaults to spjain). VIZ (viz.js) is optional;
    MC + RATINGS (mc.js / ratings.js) are optional. Every use of VIZ/MC/RATINGS
    is guarded so the page degrades gracefully if any is missing or throws.
 
-   Scales to the 84-entry Open pool: leaderboard renders all rows but builds
-   each expanded detail lazily on first open; brackets use a consensus board
-   plus a searchable single-bracket view (matrix kept only for <=12-entry pools). */
+   The five-tab layout is gone: a single glanceable screen answers
+   who's winning · where am I · what changed · why · what's next, and everything
+   else lives in slide-up drawers. Frozen engine/mc/ratings/viz math is untouched;
+   the only NEW persistence is a rank-history ring buffer keyed by resultsHash. */
 (function () {
   'use strict';
 
@@ -28,7 +28,6 @@
   };
   let LOGOS = {};
   const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const escA = esc; // attribute escaping uses same map
   const flag = t => {
     const url = LOGOS[t];
     if (url && /^https:\/\/a\.espncdn\.com\/[\w./-]+$/.test(url)) return `<img class="fl" src="${esc(url)}" alt="" loading="lazy">`;
@@ -45,22 +44,19 @@
 
   /* visual identity (viz.js) — optional, degrade to flags/nothing */
   const hasViz = (() => { try { return typeof VIZ !== 'undefined' && !!VIZ; } catch (e) { return false; } })();
-  const kit = (t, s, o) => hasViz ? VIZ.kit(t, s, o) : crest(t);
   const avatar = (n, s, o) => hasViz ? VIZ.avatar(n, s, o) : `<span class="ava" style="width:${s}px;height:${s}px">${esc((String(n)[0] || '?').toUpperCase())}</span>`;
-  // team accent hex for left-bars / score-bug rails
   const teamHex = t => {
     if (hasViz) { try { return VIZ.teamColor(t); } catch (e) {} }
     return 'var(--accent)';
   };
-  const probBarHtml = (pct, opts) => hasViz ? VIZ.probBar(pct, opts) : '';
 
   const ESPN_URL = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=20260611-20260719&limit=200';
   const FIFA_URL = 'https://api.fifa.com/api/v3/calendar/matches?idSeason=285023&idCompetition=17&language=en&count=200';
   const ROUND_LABELS = { group: 'Group Stage', r32: 'Round of 32', r16: 'Round of 16', qf: 'Quarterfinals', sf: 'Semifinals', third: '3rd-Place', final: 'Final' };
+  const ROUND_SHORT  = { group: 'group stage', r32: 'Round of 32', r16: 'Round of 16', qf: 'quarterfinal', sf: 'semifinal', third: '3rd-place', final: 'final' };
 
   const YOU_RE = /TARS/;
   const isYou = n => YOU_RE.test(String(n));
-  // strip [TARS] / (parens) for display; "You" label only used in compact contexts
   const cleanName = n => String(n).replace(/\s*\[[^\]]*\]/g, '').replace(/\s*\([^)]*\)/g, '').trim() || String(n);
   const firstName = n => isYou(n) ? 'You' : (cleanName(n).split(/\s+/)[0] || String(n));
   const fmtSigned = d => (d > 0 ? '+' : '') + d;
@@ -68,56 +64,53 @@
   const fmtTime = d => new Date(d).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' });
   const fmtClock = d => new Date(d).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   const COUNT = POOL.entries.length;
-  const SMALL_POOL = COUNT <= 12; // matrix view only for small pools
+  const BIG_POOL = COUNT > 12;        // windowed Zone-3 + search toolbar
+  const SMALL_POOL = COUNT <= 12;     // matrix view only for small pools
 
   /* ============================ number-tick animation ============================
-     Spec signature motion: when a live numeral changes, the new value slides in
-     (@keyframes tickIn + .tick in index.html). The numerals live inside innerHTML
-     strings that are fully rebuilt every refresh, so we can't add .tick at build
-     time (it would fire on every render, including the first paint). Instead we run
-     a post-render reconciliation pass: each tracked numeral carries a stable key,
-     we diff its text against the value last seen for that key, and fire .tick only
-     on a real change. First-seen keys are recorded silently (no animation on load). */
+     When a live numeral changes, the new value slides in (.tick). Numerals live in
+     innerHTML rebuilt on each refresh; we diff against the value last seen per key
+     and fire .tick only on a real change (first-seen keys recorded silently). */
   const REDUCE_MOTION = (() => {
     try { return matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; }
   })();
-  let tickPrev = Object.create(null); // key -> last-rendered text
-  // restart the CSS animation: remove, force reflow, re-add
+  let tickPrev = Object.create(null);
   function fireTick(el) {
     el.classList.remove('tick');
     void el.offsetWidth; // eslint-disable-line no-unused-expressions
     el.classList.add('tick');
   }
-  // compare el's current text to the value stored under `key`; animate if it changed
   function tickIf(key, el) {
     if (!el) return;
     const val = el.textContent;
     const had = Object.prototype.hasOwnProperty.call(tickPrev, key);
     const prev = tickPrev[key];
     tickPrev[key] = val;
-    if (REDUCE_MOTION) return;        // CSS also neutralizes the animation, but skip work
-    if (!had || prev === val) return; // first paint or unchanged → no animation
+    if (REDUCE_MOTION) return;
+    if (!had || prev === val) return;
     fireTick(el);
   }
-  // walk every tracked live numeral after a render and tick the ones that changed.
-  // keys are derived from stable DOM identity (match index, entry name, cell role)
-  // so values survive the innerHTML rebuilds that happen on each refresh.
+  // walk tracked live numerals after a render; tick the ones that changed
   function tickScan() {
-    // match score-bug numerals: keyed by match index + position (home/away)
-    document.querySelectorAll('.match').forEach(card => {
-      const mi = card.dataset.mi;
-      if (mi == null) return;
-      const ns = card.querySelectorAll('.sb-score .n');
-      ns.forEach((n, i) => tickIf('sb:' + mi + ':' + i, n));
-    });
-    // leaderboard rows: projected pts + win% per entry
+    // hero number + gauge % (single-mode .hero-num, two-up .ht-fig, both share the gauge)
+    tickIf('hero:proj', document.querySelector('#heroTile .hero-num .big'));
+    tickIf('hero:win', document.querySelector('#heroTile .hero-gauge .v'));
+    document.querySelectorAll('#heroTile .hero-two .ht-fig').forEach((v, i) => tickIf('hero:two' + i, v));
+    // you-tile
+    tickIf('you:rank', document.querySelector('#youTile .you-rankrow .big'));
+    document.querySelectorAll('#youTile .you-cell2 .v').forEach((v, i) => tickIf('you:c' + i, v));
+    // standings rows: projected + win%
     document.querySelectorAll('#lb .entry').forEach(row => {
       const n = row.dataset.name; if (n == null) return;
       tickIf('proj:' + n, row.querySelector('.proj .big'));
       tickIf('win:' + n, row.querySelector('.win-num'));
     });
-    // personal "you-bug": rank / projected / win% cells (keyed by column order)
-    document.querySelectorAll('#profileStrip .you-cell .v').forEach((v, i) => tickIf('you:' + i, v));
+    // match score-bug numerals (matches drawer)
+    document.querySelectorAll('.match').forEach(card => {
+      const mi = card.dataset.mi;
+      if (mi == null) return;
+      card.querySelectorAll('.sb-score .n').forEach((n, i) => tickIf('sb:' + mi + ':' + i, n));
+    });
     // refresh countdown
     tickIf('countdown', $('countdown'));
   }
@@ -143,8 +136,11 @@
   let simCache = { hash: null, sim: null };
   let crownsCache = null, badgesCache = null;
   let rooting = { hash: null, items: [], done: false };
-  let lbSort = 'projected', lbFilter = '';
+  let lbSort = 'projected', lbFilter = '';     // Zone-3 glance toolbar (big pool only)
+  let fbSort = 'projected', fbFilter = '';     // Full-board drawer toolbar
   let brView = 'consensus', brFilter = '';
+  let rankHistory = [];                          // NEW ring buffer [{hash,ts,ranks}]
+  let drawersBuilt = { matches: false, board: false, brackets: false, more: false };
 
   function resultsHash(matches) {
     let s = '';
@@ -157,6 +153,42 @@
     return h + ':' + s.length;
   }
   const matchKey = m => m.round + '|' + m.home + '|' + m.away;
+
+  /* ============================ NEW: rank-history ring buffer ============================
+     Persist per-results-hash snapshots of {name -> rank}, capped ~24, keyed so we can
+     draw a per-row bump sparkline (§4) and richer mover narratives (§3). Degrades when
+     <2 history points (sparkline simply skipped). Pool-scoped key avoids cross-pool mixing. */
+  const RANKHIST_KEY = 'wc26-rankhist-' + POOL.key;
+  const RANKHIST_CAP = 24;
+  function loadRankHistory() {
+    try {
+      const raw = localStorage.getItem(RANKHIST_KEY);
+      const arr = raw ? JSON.parse(raw) : [];
+      return Array.isArray(arr) ? arr.filter(x => x && x.ranks) : [];
+    } catch (e) { return []; }
+  }
+  function pushRankHistory(hash, rows) {
+    if (!rows || !rows.length) return;
+    const ranks = {};
+    for (const r of rows) ranks[r.name] = r.rank;
+    // replace if same hash already at tail (re-render of identical state), else append
+    if (rankHistory.length && rankHistory[rankHistory.length - 1].hash === hash) {
+      rankHistory[rankHistory.length - 1] = { hash, ts: Date.now(), ranks };
+    } else {
+      rankHistory.push({ hash, ts: Date.now(), ranks });
+      if (rankHistory.length > RANKHIST_CAP) rankHistory = rankHistory.slice(-RANKHIST_CAP);
+    }
+    try { localStorage.setItem(RANKHIST_KEY, JSON.stringify(rankHistory)); } catch (e) {}
+  }
+  // series of last ~8 ranks for a name (oldest→newest), only entries that recorded one
+  function rankSeries(name, max) {
+    const out = [];
+    for (const h of rankHistory) {
+      const v = h.ranks && h.ranks[name];
+      if (typeof v === 'number') out.push(v);
+    }
+    return max ? out.slice(-max) : out;
+  }
 
   /* ============================ theme ============================ */
   const themeBtn = $('themeBtn');
@@ -204,30 +236,11 @@
     }
   }
   function renderIdentity() {
-    const link = $('officialLink');
-    if (link) link.href = POOL.poolUrl || '#';
-    const k = $('heroKicker');
-    if (k) k.innerHTML = `<span class="live-dot"></span> ${esc(POOL.poolName)} · World Cup 26`;
-    const ht = $('heroTitle');
-    if (ht) ht.textContent = POOL.poolName;
-    const hs = $('heroSub');
-    if (hs) hs.innerHTML = `The live World Cup 2026 companion for the <b>${esc(POOL.poolName)}</b> bracket pool — ${COUNT} locked entries, synced with real match results. <a href="${esc(POOL.poolUrl || '#')}" target="_blank" rel="noopener">Official pool ↗</a>`;
+    const lab = $('standGlanceLab');
+    if (lab) lab.textContent = '· ' + POOL.poolName;
+    const vac = $('viewAllCount'); if (vac) vac.textContent = String(COUNT);
+    const bsub = $('dockBoardSub'); if (bsub) bsub.textContent = 'All ' + COUNT + ' entries';
   }
-
-  /* ============================ tabs (work before first fetch) ============================ */
-  function moveTabInd(tabEl) {
-    const ind = $('tabInd');
-    if (!ind || !tabEl) return;
-    ind.style.width = tabEl.offsetWidth + 'px';
-    ind.style.transform = 'translateX(' + tabEl.offsetLeft + 'px)';
-  }
-  $('tabbar').addEventListener('click', e => {
-    const t = e.target.closest('.tab'); if (!t) return;
-    document.querySelectorAll('.tab').forEach(x => x.classList.toggle('active', x === t));
-    const name = t.dataset.tab;
-    document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.dataset.panel === name));
-    moveTabInd(t);
-  });
 
   /* ============================ data fetch (keeps raw ESPN json for MC) ============================ */
   async function fetchData() {
@@ -262,61 +275,382 @@
     }
     return map;
   }
-  // win probability for a name, or null
   function winProbOf(name) {
     const sim = simCache.sim;
     return (sim && sim.winProb && typeof sim.winProb[name] === 'number') ? sim.winProb[name] : null;
   }
-
-  /* ============================ SVG icon set (status cards) ============================ */
-  const ICO = {
-    medal: '<circle cx="12" cy="9" r="6"/><path d="M8.5 14L7 22l5-3 5 3-1.5-8"/>',
-    chart: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
-    dice: '<rect x="4" y="4" width="16" height="16" rx="3"/><circle cx="9" cy="9" r="1"/><circle cx="15" cy="15" r="1"/><circle cx="15" cy="9" r="1"/><circle cx="9" cy="15" r="1"/>',
-    crown: '<path d="M3 8l3.5 9h11L21 8l-5 4-4-7-4 7z"/>',
-    flame: '<path d="M12 3c1 4 4 5 4 9a4 4 0 01-8 0c0-2 1-3 2-4 0 2 1 2 2 2 0-3-2-4-2-7z"/>',
-    users: '<circle cx="9" cy="8" r="4"/><path d="M2 21a7 7 0 0114 0M17 8a4 4 0 010 8M22 21a7 7 0 00-4-6.3"/>',
-  };
-  const ic = name => `<svg class="ico" viewBox="0 0 24 24">${ICO[name] || ''}</svg>`;
-
-  /* ============================ home: status cards + you-bug ============================ */
-  function renderStatusCards(state, rows) {
-    const cards = [];
-    const you = rows.find(r => isYou(r.name));
-    if (you) {
-      cards.push({ ic: 'medal', k: 'Your rank', v: '#' + you.rank, s: 'of ' + rows.length, cls: '', bar: 'var(--gold)' });
-      cards.push({ ic: 'chart', k: 'Projected', v: String(you.projected), s: 'ceiling ' + you.max, cls: 'green', bar: 'var(--win)' });
+  // the title favourite = max winProb across all entries (or null if sim not ready)
+  function titleFavourite() {
+    const sim = simCache.sim;
+    if (!sim || !sim.winProb) return null;
+    let bestName = null, best = -1;
+    for (const e of POOL.entries) {
+      const v = sim.winProb[e.name];
+      if (typeof v === 'number' && v > best) { best = v; bestName = e.name; }
     }
-    const wp = you ? winProbOf(you.name) : null;
-    if (wp != null) cards.push({ ic: 'dice', k: 'Title odds', v: (wp * 100).toFixed(1) + '%', s: (simCache.sim && simCache.sim.sims ? simCache.sim.sims + ' sims' : 'Monte Carlo'), cls: 'gold', bar: 'var(--accent)' });
-    const cr = currentCrown();
-    if (cr) cards.push({ ic: 'crown', k: 'Matchday crown', v: cr.winners.map(firstName).join(' & '), s: cr.round + (cr.done ? '' : ' · live') + ' · ' + cr.pts + ' pts', cls: 'gold', bar: 'var(--gold)' });
-    // leader (always useful, esp. for big pools without a you-entry)
-    if (rows[0]) cards.push({ ic: 'flame', k: 'Pool leader', v: firstName(rows[0].name), s: rows[0].projected + ' projected', cls: '', bar: 'var(--accent-2)' });
-    cards.push({ ic: 'users', k: 'Field', v: String(COUNT), s: POOL.poolName, cls: '', bar: 'var(--accent-3)' });
+    return bestName != null ? { name: bestName, winProb: best } : null;
+  }
 
-    $('statusCards').innerHTML = cards.map(c =>
-      `<div class="stat-card" style="--accent-bar:${c.bar}">
-        <div class="ic">${ic(c.ic)}</div>
-        <div class="body"><div class="k">${esc(c.k)}</div><div class="v num ${c.cls}">${esc(c.v)}</div><div class="s">${esc(c.s)}</div></div>
-      </div>`
-    ).join('');
+  /* ============================ ZONE 0 — TODAY'S STORY ============================
+     One auto-narrative sentence: the day's single biggest fact. Priority cascade. */
+  function renderTodayStory(state, rows) {
+    const el = $('todayStory'); if (!el) return;
+    const eye = el.previousElementSibling; // .z0-eye holds the live dot
+    const liveMatches = state.matches.filter(m => m.state === 'in' && m.home && m.away);
+    let html = '';
 
-    // "you" mini-scoreboard (personal broadcast score-bug)
-    const strip = $('profileStrip');
-    if (strip) {
-      if (you) {
-        const winTxt = wp != null ? (wp * 100).toFixed(1) + '%' : '—';
-        strip.innerHTML = `<div class="you-bug">
-          <div class="you-cell"><div class="v num gold">#${you.rank}</div><div class="l">Rank</div></div>
-          <div class="you-cell"><div class="v num">${you.projected}</div><div class="l">Projected</div></div>
-          <div class="you-cell"><div class="v num win">${esc(winTxt)}</div><div class="l">Win%</div></div>
-        </div>`;
-      } else strip.innerHTML = '';
+    if (liveMatches.length) {
+      const m = liveMatches[0];
+      const sc = (!isNaN(m.hs)) ? `<span class="accent">${m.hs}–${m.as}</span>` : 'underway';
+      html = `<b>LIVE</b> — ${esc(m.home)} ${sc} ${esc(m.away)}${liveMatches.length > 1 ? ` and ${liveMatches.length - 1} more in play` : ''}.`;
+    } else {
+      if (eye) eye.querySelector('.live-dot') && (eye.querySelector('.live-dot').style.display = 'none');
+      const leader = rows[0];
+      // a freshly completed crown is a strong "today" fact
+      const cr = currentCrown();
+      const today = state.matches.filter(m => m.completed && m.home && Date.now() - new Date(m.date) < 1.1 * 86400e3);
+      // Zone 0 carries the day's NEWEST fact. The points-vs-odds divergence is now owned by the
+      // hero at display scale (renderHero two-up), so we do NOT restate it here — that was
+      // redundancy without hierarchy. We lead with a fresh crown, else a single editorial line.
+      if (cr && cr.done && cr.winners && cr.winners.length) {
+        html = `<b>${esc(cr.winners.map(firstName).join(' & '))}</b> took the <b>${esc(ROUND_SHORT[cr.round] || cr.round)}</b> crown — <span class="accent">${cr.pts} pts</span> banked in the window.`;
+      } else if (leader) {
+        const gap = rows[1] ? leader.projected - rows[1].projected : 0;
+        html = `<b>${esc(firstName(leader.name))}</b> tops ${esc(POOL.poolName)} with <span class="accent">${leader.projected}</span> projected${gap > 0 && rows[1] ? `, ${gap} clear of ${esc(firstName(rows[1].name))}` : ''}.`;
+      } else {
+        html = `${esc(POOL.poolName)} is locked and live — standings update with every goal.`;
+      }
+      if (today.length && !(cr && cr.done)) {
+        html += ` <span style="opacity:.85">${today.length} match${today.length === 1 ? '' : 'es'} settled today.</span>`;
+      }
+    }
+    el.innerHTML = html;
+  }
+
+  /* ============================ ZONE 1A — HERO (who's winning) ============================
+     The hero must RESOLVE the points-vs-odds divergence at display scale (spec §2). When the
+     points leader is ALSO the title favourite, one big gold number does the job. When they
+     differ (the owner's core pain), render a TWO-UP hero: POINTS LEADER (gold) + TITLE
+     FAVOURITE (azure), both at display scale, and let the WIN% gauge fill to the favourite's
+     real odds — never a 3.5% sliver. No separate fav-flag chip (that redundancy is dropped). */
+  function pctLabel(p) { const v = p * 100; return v >= 9.95 ? Math.round(v) + '%' : v.toFixed(1) + '%'; }
+
+  function renderHero(state, rows) {
+    const el = $('heroTile'); if (!el) return;
+    const leader = rows[0];
+    if (!leader) { el.innerHTML = '<div class="skeleton">No standings yet.</div>'; return; }
+    const sims = (simCache.sim && simCache.sim.sims) ? simCache.sim.sims : null;
+    const fav = titleFavourite();
+    const split = !!(fav && fav.name !== leader.name);
+
+    // champion pick line
+    const champDead = !leader.championAlive;
+    const champLine = `Backing ${champDead ? `<span class="dead">${teamHtml(leader.champion)}</span> <span class="outtag">OUT</span>` : teamHtml(leader.champion)} to win it all`;
+
+    // THE WHY — priority cascade, first true wins (about the points lead)
+    let why;
+    const prevR = prevRanks ? prevRanks[leader.name] : null;
+    const margin = rows[1] ? leader.projected - rows[1].projected : null;
+    if (prevR && prevR > leader.rank) {
+      why = `Took the lead this matchday — up ${prevR - leader.rank} from #${prevR}.`;
+    } else if (margin === 0 && rows[1]) {
+      why = `Tied at the top — separated only by tiebreak.`;
+    } else if (rows[1]) {
+      why = `Holding #1 by ${margin} over ${esc(firstName(rows[1].name))}.`;
+    } else {
+      why = `Out in front of the field.`;
+    }
+
+    // The gauge tracks the QUESTION "who is most likely to win" → the favourite's odds when known.
+    // When leader == favourite (or no sim), it's the leader's own odds. This guarantees the bar
+    // fills to a visible number rather than the points leader's tiny stub.
+    const gaugeWp = fav ? fav.winProb : winProbOf(leader.name);
+    const gaugeVal = gaugeWp != null ? pctLabel(gaugeWp) : '—';
+    const gaugeW = gaugeWp != null ? Math.min(100, Math.max(1.5, gaugeWp * 100)) : 0;
+    const gaugeLab = split
+      ? `Title favourite · ${esc(firstName(fav.name))}${sims ? ' · ' + sims + ' sims' : ''}`
+      : `Title odds${sims ? ' · ' + sims + ' sims' : ''}`;
+
+    if (split) {
+      // TWO-UP: points leader (gold) vs title favourite (azure) — neither dominates; divergence reads instantly
+      el.classList.add('hero-split');
+      el.innerHTML = `
+        <span class="watermark" aria-hidden="true">26</span>
+        <div class="kicker">Who's winning · ${esc(POOL.poolName)}</div>
+        <div class="hero-two">
+          <div class="ht-side leader">
+            <div class="ht-eye">Points leader</div>
+            <div class="ht-who">
+              <span class="crown"><svg class="ico" viewBox="0 0 24 24" style="width:22px;height:22px"><path d="M3 8l3.5 9h11L21 8l-5 4-4-7-4 7z"/></svg></span>
+              <span class="ht-nm">${esc(firstName(leader.name))}${isYou(leader.name) ? '<span class="youtag">YOU</span>' : ''}</span>
+            </div>
+            <div class="ht-fig gold num">${leader.projected}<span class="u">proj</span></div>
+          </div>
+          <div class="ht-div" aria-hidden="true"></div>
+          <div class="ht-side fav">
+            <div class="ht-eye acc">Title favourite</div>
+            <div class="ht-who">
+              <svg class="ico fi" viewBox="0 0 24 24" style="width:20px;height:20px"><path d="M12 2l2.4 7.4H22l-6 4.4 2.3 7.2L12 16.6 5.7 21l2.3-7.2-6-4.4h7.6z"/></svg>
+              <span class="ht-nm">${esc(firstName(fav.name))}${isYou(fav.name) ? '<span class="youtag">YOU</span>' : ''}</span>
+            </div>
+            <div class="ht-fig acc num">${pctLabel(fav.winProb)}<span class="u">to win</span></div>
+          </div>
+        </div>
+        <div class="hero-gauge">
+          <div class="glab"><span class="l">${gaugeLab}</span><span class="v num">${gaugeVal}</span></div>
+          <div class="track"><i style="width:${gaugeW}%"></i></div>
+        </div>
+        <div class="hero-why">Most points: <b>${esc(firstName(leader.name))}</b> · best odds: <b>${esc(firstName(fav.name))}</b> — points don't yet match the simulator.</div>`;
+      return;
+    }
+
+    // SINGLE: leader is also the favourite (or sim not ready) — one dominant gold number
+    el.classList.remove('hero-split');
+    el.innerHTML = `
+      <span class="watermark" aria-hidden="true">26</span>
+      <div class="kicker">Pool leader · ${esc(POOL.poolName)}</div>
+      <div class="hero-id">
+        <span class="crown"><svg class="ico" viewBox="0 0 24 24" style="width:30px;height:30px"><path d="M3 8l3.5 9h11L21 8l-5 4-4-7-4 7z"/></svg></span>
+        <div class="nm">${esc(cleanName(leader.name))}${isYou(leader.name) ? '<span class="youtag">YOU</span>' : ''}</div>
+      </div>
+      <div class="hero-num">
+        <span class="big num">${leader.projected}</span>
+        <span class="of">/ 470 max · <b>${leader.official}</b> locked</span>
+      </div>
+      <div class="hero-gauge">
+        <div class="glab"><span class="l">${gaugeLab}</span><span class="v num">${gaugeVal}</span></div>
+        <div class="track"><i style="width:${gaugeW}%"></i></div>
+      </div>
+      <div class="hero-pick">${champLine}</div>
+      <div class="hero-why">${why}</div>`;
+  }
+
+  /* ============================ ZONE 1B — YOU ============================ */
+  function renderYou(state, rows) {
+    const el = $('youTile'); if (!el) return;
+    const you = rows.find(r => isYou(r.name));
+    const zone1 = $('zone1');
+    if (!you) {
+      el.style.display = 'none';
+      // hero spans full width — drive via a class so the CSS media query still wins on mobile
+      if (zone1) zone1.classList.add('solo');
+      return;
+    }
+    el.style.display = '';
+    if (zone1) zone1.classList.remove('solo');
+    const wp = winProbOf(you.name);
+    const winTxt = wp != null ? (wp * 100 >= 9.95 ? Math.round(wp * 100) + '%' : (wp * 100).toFixed(1) + '%') : '—';
+    const leader = rows[0];
+    const gapTop = leader && leader.name !== you.name ? leader.projected - you.projected : 0;
+    // gap to the next rung up
+    const above = rows.find(r => r.rank === you.rank - 1);
+    const gapNext = above ? above.projected - you.projected : 0;
+    // delta vs prev matchday
+    let mv = '<span class="mv zero">–</span>';
+    const prevR = prevRanks ? prevRanks[you.name] : null;
+    if (prevR && prevR !== you.rank) {
+      mv = prevR > you.rank ? `<span class="mv up">▲${prevR - you.rank}</span>` : `<span class="mv dn">▼${you.rank - prevR}</span>`;
+    }
+    const champDead = !you.championAlive;
+    const champState = champDead ? '<span class="outtag">OUT −50</span>' : '<span class="alivetag">alive</span>';
+    const champName = champDead ? `<span class="dead">${teamHtml(you.champion)}</span>` : teamHtml(you.champion);
+
+    // The actionable number for someone mid-table is catching the rung directly above — not the
+    // points leader (who the hero may flag as NOT the favourite anyway). So the third stat cell is
+    // "Gap to next", and the points-gap-to-#1 is demoted to a small secondary line. (Finding: the
+    // old "Gap to #1" implied #1-on-points is the target.)
+    const nextCell = you.rank === 1
+      ? `<div class="you-cell2"><div class="v win num">—</div><div class="l">Gap to next</div></div>`
+      : `<div class="you-cell2"><div class="v acc num">+${gapNext}</div><div class="l">Gap to #${above ? above.rank : you.rank - 1}</div></div>`;
+
+    el.innerHTML = `
+      <div class="kicker">You · #${you.rank} of ${COUNT}</div>
+      <div class="you-rankrow">
+        <span class="big num">${you.rank}</span>
+        <span class="ofn">of ${COUNT}</span>
+        ${mv}
+      </div>
+      <div class="you-grid">
+        <div class="you-cell2"><div class="v win num">${you.projected}</div><div class="l">Projected</div></div>
+        <div class="you-cell2"><div class="v acc num">${esc(winTxt)}</div><div class="l">Title odds</div></div>
+        ${nextCell}
+      </div>
+      <div class="you-champ">
+        Champion: ${champName} ${champState}
+        ${you.rank > 1 ? `<span style="margin-left:auto;color:var(--dim);font-weight:600">−${gapTop} to points leader</span>` : ''}
+      </div>`;
+  }
+
+  /* ============================ ZONE 2 — WHAT CHANGED & WHY ============================ */
+  // biggest mover by rank delta (prevRanks vs current). Returns {name,d,dir} or null.
+  function biggestMover(rows) {
+    if (!prevRanks) return null;
+    let up = null, dn = null;
+    for (const r of rows) {
+      const p = prevRanks[r.name];
+      if (!p || p === r.rank) continue;
+      if (p > r.rank) { const d = p - r.rank; if (!up || d > up.d) up = { name: r.name, d, dir: 'up' }; }
+      else { const d = r.rank - p; if (!dn || d > dn.d) dn = { name: r.name, d, dir: 'dn' }; }
+    }
+    if (up && dn) return up.d >= dn.d ? up : dn;
+    return up || dn;
+  }
+
+  // narrative one-liners (spec §3B). Returns array of {html, bar} newest-meaningful first, cap 3.
+  function buildNarratives(state, rows) {
+    const out = [];
+    const byName = Object.fromEntries(rows.map(r => [r.name, r]));
+    // freshly completed matches (last ~1.2 days) for "leapt N after X beat Y" + who-called lines
+    const recent = state.matches
+      .filter(m => m.completed && m.home && m.away && Date.now() - new Date(m.date) < 1.3 * 86400e3)
+      .sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    // 1. rank gain crossed with a result that caused it
+    if (prevRanks) {
+      const gains = rows
+        .map(r => ({ r, d: (prevRanks[r.name] || r.rank) - r.rank }))
+        .filter(x => x.d > 0)
+        .sort((a, b) => b.d - a.d);
+      const topGain = gains[0];
+      if (topGain && topGain.d >= 1) {
+        const ent = POOL.entries.find(e => e.name === topGain.r.name);
+        // find a recent result this entry called correctly
+        let cause = null;
+        for (const m of recent) {
+          const wc = whoCalled(m, state);
+          if (wc && wc.predicted.includes(topGain.r.name)) { cause = { team: wc.winner, opp: wc.winner === m.home ? m.away : m.home }; break; }
+        }
+        out.push({
+          bar: ent ? teamHex(cause ? cause.team : ent.champion) : 'var(--win)',
+          html: cause
+            ? `<b>${esc(firstName(topGain.r.name))}</b> leapt ${topGain.d} spot${topGain.d === 1 ? '' : 's'} to #${topGain.r.rank} after ${esc(cause.team)} beat ${esc(cause.opp)}.`
+            : `<b>${esc(firstName(topGain.r.name))}</b> climbed ${topGain.d} spot${topGain.d === 1 ? '' : 's'} to #${topGain.r.rank} this matchday.`,
+        });
+      }
+    }
+
+    // 2. matchday crown taken
+    const doneCrowns = (crownsCache || []).filter(c => c && c.done && c.winners && c.winners.length);
+    const lastCrown = doneCrowns.length ? doneCrowns[doneCrowns.length - 1] : null;
+    if (lastCrown) {
+      out.push({
+        bar: 'var(--gold)',
+        html: `<b>${esc(lastCrown.winners.map(firstName).join(' & '))}</b> took the ${esc(ROUND_SHORT[lastCrown.round] || lastCrown.round)} crown with ${lastCrown.pts} pts.`,
+      });
+    }
+
+    // 3. a champion-pick team crashed out
+    for (const m of recent) {
+      const loser = m.completed ? (m.homeWinner ? m.away : m.awayWinner ? m.home : null) : null;
+      if (!loser || !state.eliminated.has(loser)) continue;
+      const hit = POOL.entries.filter(e => e.champion === loser);
+      if (hit.length) {
+        out.push({
+          bar: 'var(--loss)',
+          html: `<b>${esc(loser)}</b> crashed out — ${hit.length} bracket${hit.length === 1 ? '' : 's'} just lost ${hit.length === 1 ? 'its' : 'their'} champion.`,
+        });
+        break;
+      }
+    }
+
+    // 4 / 6. who-called on a freshly completed match (consensus or nobody)
+    for (const m of recent) {
+      const wc = whoCalled(m, state);
+      if (!wc) continue;
+      if (wc.predicted.length) {
+        if (wc.predicted.length >= Math.ceil(COUNT * 0.5)) {
+          const topRow = wc.predicted.map(n => byName[n]).filter(Boolean).sort((a, b) => a.rank - b.rank)[0];
+          out.push({
+            bar: teamHex(wc.winner),
+            html: `<b>${wc.predicted.length} of ${COUNT}</b> called ${esc(wc.winner)}${topRow ? ` — ${esc(firstName(topRow.name))} banked the points` : ''}.`,
+          });
+          break;
+        }
+      } else {
+        out.push({
+          bar: 'var(--accent-2)',
+          html: `Nobody backed <b>${esc(wc.winner)}</b> — points the whole pool missed.`,
+        });
+        break;
+      }
+    }
+
+    // Substantive degrade (spec finding): when no rank moves / crowns have fired yet (early in the
+    // tournament prevRanks is null and official=0 for everyone), Zone 2 must NOT read as broken.
+    // Surface the most consequential standing-state fact we DO have: the title-odds gap when the
+    // favourite isn't the points leader, else the biggest single-pick consensus risk.
+    if (!out.length) {
+      const fav = titleFavourite();
+      const leader = rows[0];
+      if (fav && leader && fav.name !== leader.name) {
+        const fr = byName[fav.name];
+        out.push({
+          bar: 'var(--accent)',
+          html: `<b>${esc(firstName(fav.name))}</b> leads the title odds at ${(fav.winProb * 100).toFixed(1)}% — ${fr ? `#${fr.rank} on points, behind ${esc(firstName(leader.name))}'s ${leader.projected}` : `not the points leader`}.`,
+        });
+      } else if (fav) {
+        out.push({
+          bar: 'var(--accent)',
+          html: `<b>${esc(firstName(fav.name))}</b> tops both the board and the simulator — ${(fav.winProb * 100).toFixed(1)}% title odds.`,
+        });
+      }
+    }
+
+    // dedupe by html, cap 3
+    const seen = new Set();
+    return out.filter(o => { if (seen.has(o.html)) return false; seen.add(o.html); return true; }).slice(0, 3);
+  }
+
+  function renderZone2(state, rows) {
+    const chip = $('moverChip');
+    const list = $('narrList');
+    const zone = $('zone2');
+    const mover = biggestMover(rows);
+    const narr = buildNarratives(state, rows);
+
+    // No mover AND no narratives → don't reserve a full-width strip for "nothing happened".
+    // Collapse to a single slim line (the very first load, prevRanks null + sim not ready, lands here).
+    if (!mover && !narr.length) {
+      if (zone) zone.classList.add('z2-collapsed');
+      if (chip) { chip.style.display = 'none'; delete chip.dataset.name; }
+      if (list) list.innerHTML = `<div class="narr steady" style="--n-bar:var(--dim)"><span class="nt">Quiet matchday — standings held. Next swing below.</span><span class="auto">auto</span></div>`;
+      return;
+    }
+    if (zone) zone.classList.remove('z2-collapsed');
+
+    // biggest-mover chip — show only when there's a real move; otherwise hide it so the
+    // narrative lines own the strip (no "Standings held steady" placeholder competing for space).
+    if (chip) {
+      if (mover) {
+        chip.style.display = '';
+        const glyph = mover.dir === 'up' ? '▲' : '▼';
+        const cls = mover.dir === 'up' ? 'up' : 'dn';
+        const bar = mover.dir === 'up' ? 'var(--win)' : 'var(--loss)';
+        const ent = POOL.entries.find(e => e.name === mover.name);
+        chip.className = 'mover-chip';
+        chip.style.setProperty('--mc-bar', bar);
+        chip.dataset.name = mover.name;
+        chip.innerHTML = `<span class="mk">Biggest mover</span>
+          <div class="mid">
+            ${avatar(mover.name, 26, ent && crownCounts()[mover.name] ? { ring: 'var(--gold)' } : null)}
+            <span class="nm">${esc(firstName(mover.name))}</span>
+            <span class="delta ${cls}">${glyph}${mover.d}</span>
+          </div>
+          <div class="msub">tap to find in standings</div>`;
+      } else {
+        chip.style.display = 'none';
+        delete chip.dataset.name;
+      }
+    }
+    // narrative lines (always substantive now — buildNarratives degrades to a standing-state fact)
+    if (list) {
+      list.innerHTML = (narr.length ? narr : [{ bar: 'var(--dim)', html: 'Quiet matchday — standings held. Next swing below.', steady: true }]).map(n =>
+        `<div class="narr ${n.steady ? 'steady' : ''}" style="--n-bar:${n.bar}"><span class="nt">${n.html}</span><span class="auto">auto</span></div>`
+      ).join('');
     }
   }
 
-  /* ============================ match cards (broadcast score-bug) ============================ */
+  /* ============================ match cards (broadcast score-bug — Matches drawer) ============================ */
   function whoCalled(match, state) {
     if (!match.home || !match.away) return null;
     const winner = match.state === 'in'
@@ -358,7 +692,6 @@
     const grp = m.round === 'group'
       ? 'Group ' + (Engine.TEAM_GROUP[m.home] || '') + (m.detail ? ' · ' + esc(m.detail) : '')
       : (ROUND_LABELS[m.round] || '');
-    // status pill
     let status, scls;
     if (m.state === 'in') { status = '● ' + (m.clock || 'LIVE'); scls = 'live'; }
     else if (m.completed) { status = 'FT'; scls = 'ft'; }
@@ -366,31 +699,26 @@
 
     const showSc = !(m.state === 'pre' || isNaN(m.hs));
     const isLive = m.state === 'in';
-    // win/lose styling per side (only when completed)
     const sideCls = side => !m.completed ? '' : (side === 'h'
       ? (m.hs > m.as ? '' : m.hs < m.as ? 'lose' : '')
       : (m.as > m.hs ? '' : m.as < m.hs ? 'lose' : ''));
-    const scoreCls = side => sideCls(side);
 
     const left = `<div class="sb-team left ${sideCls('h')}" style="--team:${teamHex(m.home)}">${crest(m.home)}<span class="tnm">${esc(m.home)}</span></div>`;
     const right = `<div class="sb-team right ${sideCls('a')}" style="--team:${teamHex(m.away)}">${crest(m.away)}<span class="tnm">${esc(m.away)}</span></div>`;
     const mid = showSc
-      ? `<span class="n ${scoreCls('h')}">${m.hs}</span><span class="dash">–</span><span class="n ${scoreCls('a')}">${m.as}</span>`
+      ? `<span class="n ${sideCls('h')}">${m.hs}</span><span class="dash">–</span><span class="n ${sideCls('a')}">${m.as}</span>`
       : `<span class="vs">VS</span>`;
 
-    // who-called strip
     const called = whoCalled(m, state);
     let calledHtml = '';
     if (called && called.predicted.length) {
       const names = called.predicted.map(firstName);
       const shown = names.slice(0, 4).join(', ') + (names.length > 4 ? ` +${names.length - 4}` : '');
-      const okBad = m.completed ? 'ok' : 'ok';
-      calledHtml = `<div class="m-called"><span class="pin ${okBad}">✓</span> <b>${called.predicted.length}/${COUNT}</b> took ${esc(called.winner)} · <span>${esc(shown)}</span></div>`;
+      calledHtml = `<div class="m-called"><span class="pin ok">✓</span> <b>${called.predicted.length}/${COUNT}</b> took ${esc(called.winner)} · <span>${esc(shown)}</span></div>`;
     } else if (called) {
       calledHtml = `<div class="m-called"><span class="pin bad">✗</span> Nobody backed ${esc(called.winner)}</div>`;
     }
 
-    // stakes (upcoming/live, list mode only — gives broadcast cards room)
     let stakesHtml = '';
     const upcoming = m.state === 'pre' || m.state === 'in';
     const openStk = openStakes.has(matchKey(m));
@@ -411,17 +739,7 @@
     </div>`;
   }
 
-  /* ============================ home: today & live ============================ */
-  function renderTodayLive(state) {
-    const tk = new Date().toDateString();
-    const list = state.matches
-      .filter(m => m.home && m.away && (m.state === 'in' || new Date(m.date).toDateString() === tk))
-      .sort((a, b) => (a.state === 'in' ? 0 : 1) - (b.state === 'in' ? 0 : 1) || new Date(a.date) - new Date(b.date));
-    $('todayLive').innerHTML = list.map(m => matchCardHtml(m, state, 'home', state.matches.indexOf(m))).join('')
-      || '<div class="sec-lead">No matches today — the next kickoffs are in the rooting guide below.</div>';
-  }
-
-  /* ============================ home: rooting guide ============================ */
+  /* ============================ ZONE 4 — WHAT'S NEXT (single biggest-swing) ============================ */
   function nextUpcoming(state, n) {
     return state.matches
       .filter(m => m.home && m.away && m.state === 'pre')
@@ -429,53 +747,88 @@
       .slice(0, n);
   }
 
-  function renderRooting(state) {
-    const el = $('rooting');
-    if (!youName || !hasMC() || !hasRatings()) {
-      el.innerHTML = '<div class="sec-lead">Rooting guide needs your entry plus the simulator — currently offline for this pool.</div>';
+  // render the Zone-4 card from the rooting computation (the single match with max |dWin|)
+  function renderNextSwing() {
+    const el = $('nextSwing'); if (!el) return;
+    const up = lastGood ? nextUpcoming(lastGood, 1) : [];
+    if (!youName) {
+      // no /TARS/ entry — still show the very next kickoff (no personal swing)
+      if (!up.length) { el.innerHTML = '<div class="card next-empty">No upcoming matches left.</div>'; return; }
+      const m = up[0];
+      el.innerHTML = `<div class="card next-card" data-drawer="matches">
+        <div class="nx-top"><span class="nx-eye">Next kickoff</span><span class="nx-when">${esc(fmtTime(m.date))}</span></div>
+        <div class="nx-fix">
+          <span class="nx-team">${crest(m.home)} ${esc(m.home)}</span><span class="nx-vs">VS</span>
+          <span class="nx-team">${crest(m.away)} ${esc(m.away)}</span>
+        </div>
+        <div class="nx-hint">Open Matches for the pool stakes →</div>
+      </div>`;
       return;
     }
-    if (rooting.hash === currentHash && rooting.items.length) { renderRootingItems(); return; }
-    const up = nextUpcoming(state, 4);
-    if (!up.length) { el.innerHTML = '<div class="sec-lead">No upcoming matches left to root for.</div>'; return; }
-    el.innerHTML = up.map(m =>
-      `<div class="root-card" style="--accent-bar:${teamHex(m.home)}"><div class="hd">${esc(m.home)} vs ${esc(m.away)}</div><div class="tm">${esc(fmtTime(m.date))} · simulating…</div></div>`
-    ).join('');
-  }
+    if (!hasMC() || !hasRatings()) {
+      if (!up.length) { el.innerHTML = '<div class="card next-empty">No upcoming matches left.</div>'; return; }
+      const m = up[0];
+      el.innerHTML = `<div class="card next-card" data-drawer="matches">
+        <div class="nx-top"><span class="nx-eye">Next kickoff</span><span class="nx-when">${esc(fmtTime(m.date))}</span></div>
+        <div class="nx-fix"><span class="nx-team">${crest(m.home)} ${esc(m.home)}</span><span class="nx-vs">VS</span><span class="nx-team">${crest(m.away)} ${esc(m.away)}</span></div>
+        <div class="nx-hint">Simulator offline — open Matches for raw stakes →</div>
+      </div>`;
+      return;
+    }
 
-  function renderRootingItems() {
-    const el = $('rooting');
-    if (!rooting.items.length) return;
-    el.innerHTML = rooting.items.map(job => {
-      const m = job.match;
-      const useWin = !job.degraded && job.outcomes.some(o => typeof o.dWin === 'number');
-      let best = null;
-      const rows = job.outcomes.map(o => {
-        const v = useWin ? (typeof o.dWin === 'number' ? o.dWin : -Infinity) : o.deltaPts;
-        if (best === null || v > best.v) best = { o, v };
-        let txt, cls;
-        if (useWin) {
-          txt = typeof o.dWin === 'number' ? fmtPct(o.dWin) : '…';
-          cls = (o.dWin || 0) > 0.0005 ? 'd-pos' : (o.dWin || 0) < -0.0005 ? 'd-neg' : 'd-zero';
-        } else {
-          txt = fmtSigned(o.deltaPts) + ' pts';
-          cls = o.deltaPts > 0 ? 'd-pos' : o.deltaPts < 0 ? 'd-neg' : 'd-zero';
-        }
-        return `<div class="root-row"><span>${esc(o.label)}</span><b class="${cls}">${esc(txt)}</b></div>`;
-      }).join('');
-      const verdict = best && best.o ? `<div class="root-verdict">⚑ Root for: ${esc(best.o.label)}</div>` : '';
-      const note = useWin ? 'Δ your title odds' : 'Δ your points';
-      return `<div class="root-card" style="--accent-bar:${teamHex(m.home)}"><div class="hd">${esc(m.home)} vs ${esc(m.away)}</div><div class="tm">${esc(fmtTime(m.date))} · ${note}</div>${rows}${verdict}</div>`;
-    }).join('');
+    // pick the rooting job whose best outcome moves YOUR title odds the most (max |dWin|)
+    const jobs = rooting.items || [];
+    let best = null;
+    for (const job of jobs) {
+      if (job.degraded) continue;
+      for (const o of job.outcomes) {
+        if (typeof o.dWin !== 'number') continue;
+        if (!best || Math.abs(o.dWin) > Math.abs(best.dWin)) best = { job, dWin: o.dWin, outcome: o };
+      }
+    }
+
+    if (!best) {
+      // sim not done yet, or degraded — show the next kickoff as a placeholder (no layout thrash)
+      if (!up.length) { el.innerHTML = '<div class="card next-empty">No upcoming matches left.</div>'; return; }
+      const m = up[0];
+      el.innerHTML = `<div class="card next-card" data-drawer="matches">
+        <div class="nx-top"><span class="nx-eye">Next kickoff</span><span class="nx-when">${esc(fmtTime(m.date))}</span></div>
+        <div class="nx-fix"><span class="nx-team">${crest(m.home)} ${esc(m.home)}</span><span class="nx-vs">VS</span><span class="nx-team">${crest(m.away)} ${esc(m.away)}</span></div>
+        <div class="nx-hint">Simulating your title-odds swing…</div>
+      </div>`;
+      return;
+    }
+
+    const m = best.job.match;
+    const dPct = best.dWin * 100;
+    const wantCls = dPct > 0.05 ? '' : dPct < -0.05 ? 'neg' : 'neutral';
+    const wantVal = (dPct > 0 ? '+' : '') + dPct.toFixed(1) + '%';
+    const verb = dPct > 0.05 ? 'You want' : dPct < -0.05 ? 'Avoid' : 'Roughly neutral';
+    const swingLine = wantCls === 'neutral'
+      ? `<span class="wt">No outcome here moves your title odds much.</span>`
+      : `<span class="wt">${verb}: <b>${esc(best.outcome.label)}</b></span><span class="wv">${esc(wantVal)} odds</span>`;
+
+    el.innerHTML = `<div class="card next-card" data-drawer="matches">
+      <div class="nx-top"><span class="nx-eye">Biggest swing for you</span><span class="nx-when">${esc(fmtTime(m.date))}</span></div>
+      <div class="nx-fix">
+        <span class="nx-team">${crest(m.home)} ${esc(m.home)}</span><span class="nx-vs">VS</span>
+        <span class="nx-team">${crest(m.away)} ${esc(m.away)}</span>
+      </div>
+      <div class="nx-want ${wantCls}">
+        <svg class="ico wi" viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8M21 7v6M21 7h-6"/></svg>
+        ${swingLine}
+      </div>
+      <div class="nx-hint">Tap for full fixtures &amp; every match's stakes →</div>
+    </div>`;
   }
 
   function startRooting() {
-    if (!lastGood || !youName || !hasMC() || !hasRatings()) return;
-    if (rooting.hash === currentHash && rooting.done) { renderRootingItems(); return; }
+    if (!lastGood || !youName || !hasMC() || !hasRatings()) { renderNextSwing(); return; }
+    if (rooting.hash === currentHash && rooting.done) { renderNextSwing(); return; }
     const state = lastGood;
     const base = simCache.sim;
     const up = nextUpcoming(state, 4);
-    if (!up.length) return;
+    if (!up.length) { renderNextSwing(); return; }
     const jobs = up.map(m => {
       const stk = mcTry(() => MC.stakes(state, POOL.entries, m), null);
       const outs = (stk && stk.outcomes) ? stk.outcomes : [];
@@ -490,20 +843,20 @@
       };
     }).filter(j => j.outcomes.length);
     rooting = { hash: currentHash, items: jobs, done: false };
-    if (!jobs.length) { $('rooting').innerHTML = '<div class="sec-lead">Stakes unavailable for the next matches.</div>'; rooting.done = true; return; }
-    if (!base) { rooting.done = true; renderRootingItems(); return; } // degrade to stakes view
+    if (!jobs.length) { rooting.done = true; renderNextSwing(); return; }
+    if (!base) { rooting.done = true; renderNextSwing(); return; }
     const t0 = Date.now();
     let mi = 0, oi = 0;
     const baseP = (base.winProb && typeof base.winProb[youName] === 'number') ? base.winProb[youName] : 0;
     function step() {
       if (rooting.hash !== currentHash) return; // stale — a newer refresh took over
-      if (mi >= jobs.length) { rooting.done = true; renderRootingItems(); return; }
-      if (Date.now() - t0 > 5000) { // too slow: degrade remaining matches to stakes
+      if (mi >= jobs.length) { rooting.done = true; renderNextSwing(); return; }
+      if (Date.now() - t0 > 5000) { // too slow: degrade remaining matches
         for (let i = mi; i < jobs.length; i++) if (jobs[i].outcomes.some(o => o.dWin === null)) jobs[i].degraded = true;
-        rooting.done = true; renderRootingItems(); return;
+        rooting.done = true; renderNextSwing(); return;
       }
       const job = jobs[mi], out = job.outcomes[oi];
-      if (!out) { mi++; oi = 0; renderRootingItems(); setTimeout(step, 15); return; }
+      if (!out) { mi++; oi = 0; renderNextSwing(); setTimeout(step, 15); return; }
       try {
         const cs = MC.simulate({
           state, entries: POOL.entries, topology, ratings: RATINGS, sims: 1200,
@@ -518,31 +871,7 @@
     setTimeout(step, 15);
   }
 
-  /* ============================ home: recap strip ============================ */
-  function renderRecapStrip() {
-    const el = $('recapStrip');
-    const crowns = crownsCache || [];
-    let html = '';
-    const doneOnes = crowns.filter(c => c && c.done && c.winners && c.winners.length);
-    const lastDone = doneOnes.length ? doneOnes[doneOnes.length - 1] : null;
-    const liveOnes = crowns.filter(c => c && !c.done && c.winners && c.winners.length);
-    const liveWin = liveOnes.length ? liveOnes[liveOnes.length - 1] : null;
-    if (lastDone) html += `🏁 <b>${esc(lastDone.round)}</b> wrapped — 👑 ${esc(lastDone.winners.map(firstName).join(' & '))} took the crown with <b>${esc(String(lastDone.pts))} pts</b>. `;
-    if (liveWin) html += `Current window <b>${esc(liveWin.round)}</b>: ${esc(liveWin.winners.map(firstName).join(' & '))} leading on ${esc(String(liveWin.pts))} pts. `;
-    if (prevRanks && lastRows) {
-      let mover = null;
-      for (const r of lastRows) {
-        const p = prevRanks[r.name];
-        if (p && p > r.rank && (!mover || p - r.rank > mover.d)) mover = { name: r.name, d: p - r.rank };
-      }
-      if (mover) html += `📈 Biggest mover: ${esc(firstName(mover.name))} ▲${esc(String(mover.d))}.`;
-    }
-    if (!html) { el.style.display = 'none'; return; }
-    el.style.display = '';
-    el.innerHTML = html;
-  }
-
-  /* ============================ leaderboard ============================ */
+  /* ============================ leaderboard (Zone 3 glance + Full-board drawer) ============================ */
   const CATS = [
     ['posBonus', 'Exact group positions', 192], ['advancing', 'Advancing teams', 96],
     ['thirdPlace', '3rd-place groups', 24], ['r32w', 'R32 winners', 48],
@@ -550,15 +879,15 @@
     ['runnerUp', 'Runner-up', 8], ['champion', 'Champion', 50],
   ];
 
-  function renderPodium(rows) {
+  function renderPodium(rows, mountId) {
     const top = rows.slice(0, 3);
-    const order = [top[1], top[0], top[2]].filter(Boolean); // 2nd, 1st, 3rd
-    $('podium').innerHTML = order.map(r => {
+    const order = [top[1], top[0], top[2]].filter(Boolean);
+    const mount = $(mountId); if (!mount) return;
+    mount.innerHTML = order.map(r => {
       const medalSvg = `<svg class="ico" viewBox="0 0 24 24" style="width:22px;height:22px;color:var(--medal)"><circle cx="12" cy="9" r="6"/><path d="M8.5 14L7 22l5-3 5 3-1.5-8"/></svg>`;
       const medalCol = ['#E8B73A', '#C7CDD6', '#CD8E5A'][r.rank - 1];
-      const ringCol = ['#E8B73A', '#C7CDD6', '#CD8E5A'][r.rank - 1];
       return `<div class="pod ${r.rank === 1 ? 'p1' : ''}" style="--medal:${medalCol}">
-        <div class="pod-ava">${avatar(r.name, r.rank === 1 ? 62 : 50, { ring: ringCol, crown: r.rank === 1 })}<span class="pod-medal">${medalSvg}</span></div>
+        <div class="pod-ava">${avatar(r.name, r.rank === 1 ? 62 : 50, { ring: medalCol, crown: r.rank === 1 })}<span class="pod-medal">${medalSvg}</span></div>
         <div class="nm">${esc(cleanName(r.name))}${isYou(r.name) ? ' <span class="youtag">YOU</span>' : ''}</div>
         <div class="ch">👑 ${teamHtml(r.champion)}</div>
         <div class="pts num">${r.projected}</div>
@@ -566,7 +895,6 @@
     }).join('');
   }
 
-  // build the (lazy) detail panel for a single entry
   function detailHtml(r, e, state) {
     const lockedPct = Math.round(r.official / 470 * 100);
     const projPct = Math.max(0, Math.round((r.projected - r.official) / 470 * 100));
@@ -588,96 +916,182 @@
     </div>`;
   }
 
-  // win% column content. For big fields most are tiny: show bar+% if >=0.05%, else an "In contention" / "Out" tag.
   function winCellHtml(r) {
     const wp = winProbOf(r.name);
-    if (wp == null) {
-      // sim not ready — show a neutral placeholder so layout is stable
-      return `<div class="winwrap"><div class="win-bar"><i style="width:0%"></i></div><span class="win-num num">—</span></div>`;
-    }
+    if (wp == null) return `<div class="winwrap"><div class="win-bar"><i style="width:0%"></i></div><span class="win-num num">—</span></div>`;
     const pctNum = wp * 100;
     if (pctNum >= 0.05) {
       const shown = pctNum >= 9.95 ? Math.round(pctNum) + '%' : pctNum.toFixed(1) + '%';
       return `<div class="winwrap"><div class="win-bar"><i style="width:${Math.min(100, Math.max(2, pctNum))}%"></i></div><span class="win-num num">${shown}</span></div>`;
     }
-    // tiny but alive vs eliminated champion path
     const tag = r.championAlive ? '<span class="alivetag">In contention</span>' : '<span class="outtag">Long shot</span>';
     return `<div class="winwrap" style="justify-content:flex-end">${tag}</div>`;
   }
 
-  function entryHeadHtml(r, e, state, cc) {
+  // NEW §4: word-sized inline bump sparkline of last ~8 ranks (inverted-y; rank 1 on top)
+  function bumpHtml(name) {
+    const series = rankSeries(name, 8);
+    if (series.length < 2) return '<span class="bump"></span>';
+    const W = 56, H = 22, pad = 2;
+    let lo = Math.min(...series), hi = Math.max(...series);
+    if (lo === hi) { lo -= 1; hi += 1; } // flat line, give it room
+    const n = series.length;
+    const pts = series.map((v, i) => {
+      const x = pad + (W - 2 * pad) * (n === 1 ? 0 : i / (n - 1));
+      // inverted: smaller rank (better) → higher on screen (smaller y)
+      const y = pad + (H - 2 * pad) * ((v - lo) / (hi - lo));
+      return [x, y];
+    });
+    const d = pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' ');
+    const cls = isYou(name) ? 'hot' : '';
+    const last = pts[pts.length - 1];
+    return `<svg class="bump ${cls}" viewBox="0 0 ${W} ${H}" aria-hidden="true"><path d="${d}"/><circle class="dot" cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="1.8"/></svg>`;
+  }
+
+  function entryHeadHtml(r, e, state, cc, opts) {
+    const noBump = !!(opts && opts.noBump);
     const rankCls = r.rank === 1 ? 'r1' : (r.rank <= 3 ? 'r' + r.rank : '');
-    const accentBar = r.rank === 1 ? 'var(--gold)' : (r.rank <= 3 ? 'var(--gold-soft)' : (isYou(r.name) ? 'var(--accent)' : 'var(--line)'));
-    let mv = '';
+    let dl = '<span class="delta zero">–</span>';
     if (prevRanks && prevRanks[r.name] && prevRanks[r.name] !== r.rank) {
-      mv = prevRanks[r.name] > r.rank
-        ? `<span class="mv up">▲${prevRanks[r.name] - r.rank}</span>`
-        : `<span class="mv dn">▼${r.rank - prevRanks[r.name]}</span>`;
+      dl = prevRanks[r.name] > r.rank
+        ? `<span class="delta up">▲${prevRanks[r.name] - r.rank}</span>`
+        : `<span class="delta dn">▼${r.rank - prevRanks[r.name]}</span>`;
     }
     const crownTag = cc[r.name] ? `<span class="crowntag" title="Matchday crowns">👑${cc[r.name] > 1 ? '×' + cc[r.name] : ''}</span>` : '';
     const champState = r.championAlive ? '<span class="alivetag">alive</span>' : '<span class="outtag">OUT −50</span>';
     const champName = r.championAlive ? teamHtml(r.champion) : `<span class="dead">${teamHtml(r.champion)}</span>`;
+    // GAP column (F1 timing-tower): points behind the leader
+    const leadProj = lastRows && lastRows[0] ? lastRows[0].projected : r.projected;
+    const gapVal = r.rank === 1 ? '—' : '−' + (leadProj - r.projected);
+    // "official" subline is noise while every row reads "0 official" (groups not complete yet) —
+    // only show it once a row has actually banked official points.
+    const offLine = r.official > 0 ? `<div class="off num">${r.official} official</div>` : '';
+    // Zone-3 glance drops the bump column entirely (dead weight before history exists + cuts
+    // clutter); the Full-board drawer keeps it where density is expected.
+    const bumpCell = noBump ? '' : bumpHtml(r.name);
     return `<div class="entry-head">
-      <div class="rank ${rankCls} num">${r.rank}${mv}</div>
-      <div class="lb-ava">${avatar(r.name, 30, cc[r.name] ? { ring: 'var(--gold)' } : null)}</div>
+      <div class="rank ${rankCls} num">${r.rank}</div>
+      ${dl}
+      <div class="lb-ava">${avatar(r.name, 28, cc[r.name] ? { ring: 'var(--gold)' } : null)}</div>
       <div class="who">
         <div class="nm">${esc(cleanName(r.name))}${isYou(r.name) ? '<span class="youtag">YOU</span>' : ''}${crownTag}</div>
-        <div class="ch">Champion: ${champName} ${champState}</div>
+        <div class="ch" data-bracket="${esc(r.name)}">Champion: ${champName} ${champState}</div>
       </div>
+      ${bumpCell}
       ${winCellHtml(r)}
-      <div class="proj"><div class="big num">${r.projected}</div><div class="off num">${r.official} official</div></div>
+      <div class="gap num">${gapVal}</div>
+      <div class="proj"><div class="big num">${r.projected}</div>${offLine}</div>
       <div class="chev"><svg class="ico" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></div>
     </div>`;
   }
 
-  function sortedRows() {
-    const rows = (lastRows || []).slice();
-    if (lbSort === 'official') rows.sort((a, b) => b.official - a.official || a.rank - b.rank);
-    else if (lbSort === 'max') rows.sort((a, b) => b.max - a.max || a.rank - b.rank);
-    // 'projected' keeps engine order (already projected-desc)
-    return rows;
+  function sortRows(rows, sortKey) {
+    const out = rows.slice();
+    if (sortKey === 'official') out.sort((a, b) => b.official - a.official || a.rank - b.rank);
+    else if (sortKey === 'max') out.sort((a, b) => b.max - a.max || a.rank - b.rank);
+    return out;
   }
 
-  function renderLb(rows, state) {
+  function rowHtml(r, byName, cc, state, openSet, opts) {
+    const e = byName[r.name];
+    const accentBar = r.rank === 1 ? 'var(--gold)' : (r.rank <= 3 ? 'var(--gold-soft)' : (isYou(r.name) ? 'var(--accent)' : 'var(--line)'));
+    const open = openSet.has(r.name);
+    const detail = open ? detailHtml(r, e, state) : '';
+    const headCls = (opts && opts.noBump) ? ' no-bump' : '';
+    return `<div class="entry ${isYou(r.name) ? 'you' : ''} ${open ? 'open' : ''}${headCls}" data-name="${esc(r.name)}" style="--accent-bar:${accentBar}">
+      ${entryHeadHtml(r, e, state, cc, opts)}
+      ${detail}
+    </div>`;
+  }
+
+  /* ----- Zone 3 GLANCE (always-visible, windowed for big pools) ----- */
+  const GLANCE = { noBump: true };   // Zone-3 rows omit the sparkline (leaner glance, ~5 columns)
+  function renderGlance(rows, state) {
     const byName = Object.fromEntries(POOL.entries.map(e => [e.name, e]));
     const cc = crownCounts();
-    const display = sortedRows();
+    const lb = $('lb'); if (!lb) return;
+
+    if (!BIG_POOL) {
+      // small pool — show all rows (filter applies via toolbar if present)
+      const display = sortRows(rows, lbSort);
+      const f = lbFilter.trim().toLowerCase();
+      let shown = 0;
+      const html = display.map((r, i) => {
+        const hidden = f && !r.name.toLowerCase().includes(f);
+        if (!hidden) shown++;
+        return rowHtml(r, byName, cc, state, openNames, GLANCE).replace('class="entry ', 'class="entry ' + (i % 2 ? 'zebra ' : '')).replace('style="--accent-bar', (hidden ? 'data-hidden="1" style="display:none;--accent-bar' : 'style="--accent-bar'));
+      }).join('');
+      lb.innerHTML = html;
+      const cnt = $('lbCount'); if (cnt) cnt.textContent = f ? `Showing ${shown} of ${COUNT}` : `${COUNT} entries`;
+      return;
+    }
+
+    // BIG pool — when the user is searching, the windowed Top3+neighbourhood can't answer the
+    // query (most rows aren't rendered), so honor lbFilter with a flat filtered list. Empty
+    // filter falls through to the windowed glance below.
     const f = lbFilter.trim().toLowerCase();
-    let shown = 0;
-    const html = display.map(r => {
-      const e = byName[r.name];
-      const rankCls = r.rank === 1 ? 'r1' : (r.rank <= 3 ? 'r' + r.rank : '');
-      const accentBar = r.rank === 1 ? 'var(--gold)' : (r.rank <= 3 ? 'var(--gold-soft)' : (isYou(r.name) ? 'var(--accent)' : 'var(--line)'));
-      const open = openNames.has(r.name);
-      const hidden = f && !r.name.toLowerCase().includes(f);
-      if (!hidden) shown++;
-      // detail built lazily — only when open (perf for 84 rows)
-      const detail = open ? detailHtml(r, e, state) : '';
-      return `<div class="entry ${isYou(r.name) ? 'you' : ''} ${open ? 'open' : ''}" data-name="${esc(r.name)}" style="--accent-bar:${accentBar}${hidden ? ';display:none' : ''}">
-        ${entryHeadHtml(r, e, state, cc)}
-        ${detail}
-      </div>`;
-    }).join('');
-    $('lb').innerHTML = html;
-    const cnt = $('lbCount');
-    if (cnt) cnt.textContent = f ? `Showing ${shown} of ${COUNT}` : `${COUNT} entries`;
+    if (f) {
+      const hits = sortRows(rows, lbSort).filter(r => r.name.toLowerCase().includes(f));
+      lb.innerHTML = hits.length
+        ? hits.map((r, i) => rowHtml(r, byName, cc, state, openNames, GLANCE).replace('class="entry ', 'class="entry ' + (i % 2 ? 'zebra ' : ''))).join('')
+        : '<div class="lb-divider">No players match.</div>';
+      const cnt = $('lbCount'); if (cnt) cnt.textContent = `Showing ${hits.length} of ${COUNT}`;
+      return;
+    }
+
+    // BIG pool — windowed: Top 3 + divider + YOU±1 neighbourhood
+    const top3 = rows.slice(0, 3);
+    const youRow = rows.find(r => isYou(r.name));
+    const blocks = [];
+    blocks.push(top3.map((r, i) => rowHtml(r, byName, cc, state, openNames, GLANCE).replace('class="entry ', 'class="entry ' + (i % 2 ? 'zebra ' : ''))).join(''));
+    if (youRow) {
+      const idx = rows.indexOf(youRow);
+      const nbrs = [];
+      if (idx - 1 >= 0) nbrs.push(rows[idx - 1]);
+      nbrs.push(youRow);
+      if (idx + 1 < rows.length) nbrs.push(rows[idx + 1]);
+      // only show the neighbourhood if it isn't already entirely inside the top-3 block
+      const extra = nbrs.filter(r => !top3.includes(r));
+      if (extra.length) {
+        blocks.push('<div class="lb-divider">Your neighbourhood</div>');
+        blocks.push(extra.map(r => rowHtml(r, byName, cc, state, openNames, GLANCE)).join(''));
+      }
+    }
+    lb.innerHTML = blocks.join('');
+    const cnt = $('lbCount'); if (cnt) cnt.textContent = `${COUNT} entries`;
   }
 
-  // re-filter without re-rendering (cheap show/hide for the search box)
-  function applyLbFilter() {
-    const f = lbFilter.trim().toLowerCase();
+  /* ----- Full-board drawer (all rows, search/sort/jump) ----- */
+  function renderFullBoard() {
+    if (!lastRows || !lastGood) return;
+    const byName = Object.fromEntries(POOL.entries.map(e => [e.name, e]));
+    const cc = crownCounts();
+    const display = sortRows(lastRows, fbSort);
+    const f = fbFilter.trim().toLowerCase();
     let shown = 0;
-    document.querySelectorAll('#lb .entry').forEach(row => {
+    const html = display.map((r, i) => {
+      const hidden = f && !r.name.toLowerCase().includes(f);
+      if (!hidden) shown++;
+      const base = rowHtml(r, byName, cc, lastGood, openNames);
+      const zebra = base.replace('class="entry ', 'class="entry ' + (i % 2 ? 'zebra ' : ''));
+      return hidden ? zebra.replace('style="--accent-bar', 'data-hidden="1" style="display:none;--accent-bar') : zebra;
+    }).join('');
+    const fb = $('fbLb'); if (fb) fb.innerHTML = html;
+    const cnt = $('fbCount'); if (cnt) cnt.textContent = f ? `Showing ${shown} of ${COUNT}` : `${COUNT} entries`;
+  }
+  function applyFbFilter() {
+    const f = fbFilter.trim().toLowerCase();
+    let shown = 0;
+    document.querySelectorAll('#fbLb .entry').forEach(row => {
       const n = (row.dataset.name || '').toLowerCase();
       const hide = f && !n.includes(f);
       row.style.display = hide ? 'none' : '';
       if (!hide) shown++;
     });
-    const cnt = $('lbCount');
-    if (cnt) cnt.textContent = f ? `Showing ${shown} of ${COUNT}` : `${COUNT} entries`;
+    const cnt = $('fbCount'); if (cnt) cnt.textContent = f ? `Showing ${shown} of ${COUNT}` : `${COUNT} entries`;
   }
 
-  /* ============================ matches tab ============================ */
+  /* ============================ matches drawer ============================ */
   function renderRoundbar(state) {
     const present = ['all'];
     for (const r of ['group', 'r32', 'r16', 'qf', 'sf', 'third', 'final'])
@@ -710,22 +1124,23 @@
     $('matchwrap').innerHTML = groups.map(g =>
       `<div class="date-head">${esc(g.label)}</div><div class="matchgrid">${g.items.map(m => matchCardHtml(m, state, 'list', state.matches.indexOf(m))).join('')}</div>`
     ).join('') || '<div class="skeleton">No matches in this view.</div>';
-
-    const liveCount = state.matches.filter(m => m.state === 'in').length;
-    $('livepill').style.display = liveCount ? '' : 'none';
-    $('liveTxt').textContent = liveCount + ' LIVE';
-    $('mBadge').textContent = liveCount ? liveCount + ' live' : '';
   }
 
-  /* ============================ brackets: consensus board ============================ */
-  // tally a getter over entries -> sorted [[team, names[]], ...] desc
+  // live-count badge in nav + dock badge (computed every refresh, cheap)
+  function updateLiveBadges(state) {
+    const liveCount = state.matches.filter(m => m.state === 'in').length;
+    const lp = $('livepill'); if (lp) lp.style.display = liveCount ? '' : 'none';
+    const lt = $('liveTxt'); if (lt) lt.textContent = liveCount + ' LIVE';
+    const db = $('dockMatchesBadge'); if (db) db.textContent = liveCount ? liveCount + ' live' : '';
+  }
+
+  /* ============================ brackets drawer: consensus board ============================ */
   function tallyList(getList) {
     const m = {};
     for (const e of POOL.entries) for (const t of [].concat(getList(e))) (m[t] = m[t] || []).push(e.name);
     return Object.entries(m).sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
   }
 
-  // one consensus slot card. rows: sorted [[team,names]]. deadSet optional.
   function consensusSlot(title, entriesArr, state, opts) {
     const o = opts || {};
     const cap = o.cap || 8;
@@ -760,23 +1175,20 @@
     slots.push(consensusSlot('👑 Champion', tallyList(e => e.champion), state));
     slots.push(consensusSlot('🥈 Runner-up', tallyList(e => e.runnerUp), state));
     slots.push(consensusSlot('🚀 Semifinalists (any slot)', tallyList(e => e.sf), state, { cap: 8 }));
-    // group winners A..L
     Object.keys(Engine.GROUPS).forEach(g => {
       slots.push(consensusSlot('Group ' + g + ' winner', tallyList(e => e.groups[g][0]), state, { cap: 6 }));
     });
-    // thirds (which groups' third-place teams advance)
     slots.push(consensusSlot('3rd-place groups backed', tallyGroups(e => e.thirds), state, { cap: 8, isGroup: true }));
     $('consensusBoard').innerHTML = slots.join('');
   }
 
-  // thirds are group letters, not teams — render with a simple letter chip instead of a flag
   function tallyGroups(getList) {
     const m = {};
     for (const e of POOL.entries) for (const g of [].concat(getList(e))) (m[g] = m[g] || []).push(e.name);
     return Object.entries(m).sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
   }
 
-  /* ============================ brackets: pick matrix (small pools only) ============================ */
+  /* ============================ brackets drawer: pick matrix (small pools only) ============================ */
   function renderMatrix(state) {
     if (!SMALL_POOL) return;
     const entries = POOL.entries, k = state.knockout, elim = state.eliminated;
@@ -804,7 +1216,7 @@
     const wolf = (v, vals) => vals.filter(x => x === v).length === 1 ? ' 🐺' : '';
     const N = entries.length;
 
-    const rowHtml = (label, cells, consensus, extraCls) =>
+    const rowH = (label, cells, consensus, extraCls) =>
       `<tr class="${extraCls || ''}"><th class="rowlab">${label}</th><td class="cons">${consensus}</td>` +
       cells.map((c, i) => `<td class="cell-${c.st}${i === youIdx ? ' youcol' : ''}"${c.title ? ` title="${esc(c.title)}"` : ''}>${c.html}</td>`).join('') + '</tr>';
 
@@ -813,22 +1225,22 @@
 
     const rows = [];
     { const vals = entries.map(e => e.champion);
-      rows.push(rowHtml('👑 Champion', entries.map(e => ({ st: stChamp(e.champion), html: esc(e.champion) + wolf(e.champion, vals) })), majority(vals), 'grp-start')); }
+      rows.push(rowH('👑 Champion', entries.map(e => ({ st: stChamp(e.champion), html: esc(e.champion) + wolf(e.champion, vals) })), majority(vals), 'grp-start')); }
     { const vals = entries.map(e => e.runnerUp);
-      rows.push(rowHtml('🥈 Runner-up', entries.map(e => ({ st: stRunner(e.runnerUp), html: esc(e.runnerUp) + wolf(e.runnerUp, vals) })), majority(vals))); }
+      rows.push(rowH('🥈 Runner-up', entries.map(e => ({ st: stRunner(e.runnerUp), html: esc(e.runnerUp) + wolf(e.runnerUp, vals) })), majority(vals))); }
     { const cnt = {};
       for (const e of entries) for (const t of e.sf) cnt[t] = (cnt[t] || 0) + 1;
       const sortedAll = Object.entries(cnt).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
       const per = entries.map(e => e.sf.slice().sort((a, b) => (cnt[b] - cnt[a]) || a.localeCompare(b)));
       for (let i = 0; i < 4; i++) {
         const cons = sortedAll[i] ? `${esc(sortedAll[i][0])} ${sortedAll[i][1]}/${N}` : '—';
-        rows.push(rowHtml(i === 0 ? '🚀 Semifinalists' : '&nbsp;', per.map(p => {
+        rows.push(rowH(i === 0 ? '🚀 Semifinalists' : '&nbsp;', per.map(p => {
           const t = p[i];
           return { st: stSf(t), html: esc(t) + (cnt[t] === 1 ? ' 🐺' : '') };
         }), cons, i === 0 ? 'grp-start' : ''));
       }
     }
-    { rows.push(rowHtml('🛡️ Reaches QF', entries.map(e => {
+    { rows.push(rowH('🛡️ Reaches QF', entries.map(e => {
         const dead = e.qf.filter(t => elim.has(t) && !k.qf.has(t));
         const banked = e.qf.filter(t => k.qf.has(t)).length;
         const alive = 8 - dead.length;
@@ -837,7 +1249,7 @@
       }), '—', 'grp-start')); }
     Object.keys(Engine.GROUPS).forEach((g, gi) => {
       const vals = entries.map(e => e.groups[g][0]);
-      rows.push(rowHtml('Grp ' + esc(g) + ' winner', entries.map(e => {
+      rows.push(rowH('Grp ' + esc(g) + ' winner', entries.map(e => {
         const t = e.groups[g][0];
         return { st: stGw(g, t), html: esc(t) + wolf(t, vals) };
       }), majority(vals), gi === 0 ? 'grp-start' : ''));
@@ -861,7 +1273,7 @@
     }
   }
 
-  /* ============================ brackets: single player view ============================ */
+  /* ============================ brackets drawer: single player view ============================ */
   function renderPlayerView(state) {
     if (!state) return;
     const sel = $('pvSel');
@@ -900,7 +1312,7 @@
       ${final}`;
   }
 
-  /* ============================ brackets: head-to-head ============================ */
+  /* ============================ brackets drawer: head-to-head ============================ */
   function fillPickers() {
     const opts = POOL.entries.map((e, i) => `<option value="${i}">${esc(cleanName(e.name))}</option>`).join('');
     $('h2hA').innerHTML = opts; $('h2hB').innerHTML = opts;
@@ -913,7 +1325,6 @@
     $('pvSel').onchange = () => renderPlayerView(lastGood);
   }
 
-  // filter the player-view <select> via the brSearch box
   function applyBrFilter() {
     const sel = $('pvSel'), f = brFilter.trim().toLowerCase();
     if (!sel) return;
@@ -966,12 +1377,13 @@
     $('h2hGrid').innerHTML = mkCol(ca, cb) + mkCol(cb, ca);
   }
 
-  /* ============================ insights: badges ============================ */
+  /* ============================ more drawer: badges ============================ */
   function renderBadges() {
     const wrap = $('badges'), zone = $('badgesCons');
+    if (!wrap) return;
     if (!badgesCache) {
       wrap.innerHTML = '<div class="sec-lead">Badges unavailable right now — they land once matchday crowns are decided.</div>';
-      zone.style.display = 'none';
+      if (zone) zone.style.display = 'none';
       return;
     }
     const cons = [];
@@ -985,14 +1397,16 @@
         '</div>';
     }).join('');
     wrap.innerHTML = cards || '<div class="sec-lead">No badges earned yet — first crowns land 18 Jun.</div>';
-    if (cons.length) {
-      zone.style.display = '';
-      $('badgesConsList').innerHTML = cons.map(({ name, b }) =>
-        `<div class="bdg"><span class="roundel">${esc(b.emoji)}</span><span><span class="bl">${esc(b.label)}</span> — ${esc(firstName(name))}<br><span class="bd">${esc(b.desc)}</span></span></div>`).join('');
-    } else zone.style.display = 'none';
+    if (zone) {
+      if (cons.length) {
+        zone.style.display = '';
+        $('badgesConsList').innerHTML = cons.map(({ name, b }) =>
+          `<div class="bdg"><span class="roundel">${esc(b.emoji)}</span><span><span class="bl">${esc(b.label)}</span> — ${esc(firstName(name))}<br><span class="bd">${esc(b.desc)}</span></span></div>`).join('');
+      } else zone.style.display = 'none';
+    }
   }
 
-  /* ============================ insights: consensus columns ============================ */
+  /* ============================ more drawer: consensus columns ============================ */
   function renderConsensus(state) {
     const N = POOL.entries.length;
     const bar = (entries, showNames, limit) => entries.slice(0, limit || entries.length).map(([team, names]) => {
@@ -1013,7 +1427,7 @@
     $('consBold').innerHTML = bold;
   }
 
-  /* ============================ insights: most similar brackets ============================ */
+  /* ============================ more drawer: most similar brackets ============================ */
   function similarity(a, b) {
     const ov = (A, B) => { const s = new Set(B); let n = 0; for (const x of A) if (s.has(x)) n++; return A.length ? n / A.length : 0; };
     let s = 0;
@@ -1040,7 +1454,7 @@
     }).join('') || '<div class="sec-lead">Not enough entries to compare.</div>';
   }
 
-  /* ============================ digest + WhatsApp recap ============================ */
+  /* ============================ digest + WhatsApp recap (ONE share action) ============================ */
   function digest(rows, state) {
     const today = state.matches.filter(m => m.completed && m.home && Date.now() - new Date(m.date) < 1.3 * 86400e3)
       .map(m => `${m.home} ${m.hs}-${m.as} ${m.away}`);
@@ -1065,20 +1479,20 @@
   async function copyDigest() {
     if (!lastRows || !lastGood) return;
     const text = digest(lastRows, lastGood);
-    try { await navigator.clipboard.writeText(text); flash('✅ Copied!'); }
+    try { await navigator.clipboard.writeText(text); flashDigest('✅ Copied!'); }
     catch (e) { prompt('Copy the digest:', text); }
   }
-  function flash(msg) {
-    const b = $('digestBtn');
+  function flashDigest(msg) {
+    const b = $('digestBtn'); if (!b) return;
     const o = b.dataset.orig || b.innerHTML; b.dataset.orig = o;
-    b.innerHTML = esc(msg); setTimeout(() => { b.innerHTML = o; }, 1800);
+    b.title = msg; setTimeout(() => { b.title = 'Copy WhatsApp digest'; }, 1800);
   }
   function flashRecap(msg) {
-    [$('recapBtn'), $('homeRecapBtn')].forEach(b => {
-      if (!b) return;
-      const o = b.dataset.orig || b.innerHTML; b.dataset.orig = o;
-      b.innerHTML = esc(msg); setTimeout(() => { b.innerHTML = o; }, 2400);
-    });
+    const b = $('recapBtn'); if (!b) return;
+    const o = b.dataset.orig || b.innerHTML; b.dataset.orig = o;
+    const lbl = b.querySelector('.lbl');
+    if (lbl) { lbl.textContent = msg; setTimeout(() => { lbl.textContent = 'Share'; }, 2400); }
+    else { b.title = msg; setTimeout(() => { b.title = 'Share recap'; }, 2400); }
   }
 
   function rrect(ctx, x, y, w, h, r) {
@@ -1096,8 +1510,7 @@
     c.width = 1080; c.height = 1350;
     const ctx = c.getContext('2d');
     if (!ctx) return null;
-    // broadcast canvas: near-black with gold spine
-    const canvas = '#0A0E14', gold = '#E8B73A', cream = '#F2F5F9', accent = '#1FA2FF';
+    const canvas = '#0A0E14', gold = '#E8B73A', cream = '#F2F5F9';
     ctx.fillStyle = canvas; ctx.fillRect(0, 0, 1080, 1350);
     ctx.fillStyle = gold; ctx.fillRect(0, 0, 1080, 10);
     ctx.textAlign = 'center';
@@ -1152,15 +1565,15 @@
     setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
   }
   async function shareRecap() {
-    if (!lastRows || !lastGood) { flashRecap('⏳ Still loading…'); return; }
+    if (!lastRows || !lastGood) { flashRecap('⏳ Loading…'); return; }
     const text = digest(lastRows, lastGood);
     let copied = false;
     try { await navigator.clipboard.writeText(text); copied = true; } catch (e) {}
     let c = null;
     try { c = drawRecap(lastRows); } catch (e) { c = null; }
-    if (!c || !c.toBlob) { flashRecap(copied ? '✅ Text copied (no image)' : '⚠️ Recap failed'); return; }
+    if (!c || !c.toBlob) { flashRecap(copied ? '✅ Text copied' : '⚠️ Failed'); return; }
     c.toBlob(blob => {
-      if (!blob) { flashRecap(copied ? '✅ Text copied (no image)' : '⚠️ Image failed'); return; }
+      if (!blob) { flashRecap(copied ? '✅ Text copied' : '⚠️ Failed'); return; }
       let shared = false;
       try {
         if (typeof File !== 'undefined' && navigator.canShare) {
@@ -1172,14 +1585,14 @@
         }
       } catch (e) { shared = false; }
       if (!shared) downloadBlob(blob);
-      flashRecap('✅ Image ' + (shared ? 'shared' : 'saved') + (copied ? ' · text copied' : ''));
+      flashRecap('✅ ' + (shared ? 'Shared' : 'Saved'));
     }, 'image/png');
   }
 
   /* ============================ MC simulation pipeline ============================ */
   function scheduleSim() {
     if (!lastGood || !lastRows) return;
-    if (!hasMC() || !hasRatings()) { renderRooting(lastGood); return; }
+    if (!hasMC() || !hasRatings()) { renderNextSwing(); return; }
     if (simCache.hash === currentHash && simCache.sim) {
       applySim();
       startRooting();
@@ -1197,33 +1610,78 @@
       startRooting();
     }, 50);
   }
+  // sim landed — repaint the zones whose numbers depend on win% (hero gauge, you-tile, standings)
   function applySim() {
     if (!lastGood || !lastRows) return;
     try {
-      renderStatusCards(lastGood, lastRows);
-      renderLb(lastRows, lastGood);
-      tickScan(); // sim just landed → win% / projected may have moved
+      renderTodayStory(lastGood, lastRows);
+      renderHero(lastGood, lastRows);
+      renderYou(lastGood, lastRows);
+      renderGlance(lastRows, lastGood);
+      if (drawersBuilt.board) renderFullBoard();
+      tickScan();
     } catch (e) {}
+  }
+
+  /* ============================ drawers (slide-up sheets) ============================ */
+  let openDrawer = null;
+  function buildDrawer(name) {
+    if (!lastGood || !lastRows) return;
+    if (name === 'matches' && !drawersBuilt.matches) {
+      renderRoundbar(lastGood); renderMatches(lastGood); drawersBuilt.matches = true;
+    } else if (name === 'board' && !drawersBuilt.board) {
+      renderPodium(lastRows, 'boardPodium'); renderFullBoard(); drawersBuilt.board = true;
+    } else if (name === 'brackets' && !drawersBuilt.brackets) {
+      renderConsensusBoard(lastGood); renderMatrix(lastGood); renderBrViewToggle();
+      renderPlayerView(lastGood); renderH2H(lastGood, lastRows); drawersBuilt.brackets = true;
+    } else if (name === 'more' && !drawersBuilt.more) {
+      renderBadges(); renderConsensus(lastGood); renderSimilar(); drawersBuilt.more = true;
+    }
+  }
+  function showDrawer(name, focusYou) {
+    const d = $('drawer-' + name); const scrim = $('scrim');
+    if (!d) return;
+    buildDrawer(name);
+    if (openDrawer && openDrawer !== name) { const o = $('drawer-' + openDrawer); if (o) { o.classList.remove('open'); o.setAttribute('aria-hidden', 'true'); } }
+    d.classList.add('open'); d.setAttribute('aria-hidden', 'false');
+    if (scrim) scrim.classList.add('open');
+    document.body.style.overflow = 'hidden';
+    openDrawer = name;
+    if (focusYou) {
+      setTimeout(() => {
+        const row = d.querySelector('.entry.you');
+        if (row) { row.scrollIntoView({ block: 'center' }); row.classList.add('flash'); setTimeout(() => row.classList.remove('flash'), 900); }
+      }, 300);
+    }
+  }
+  function closeDrawer() {
+    if (!openDrawer) return;
+    const d = $('drawer-' + openDrawer); const scrim = $('scrim');
+    if (d) { d.classList.remove('open'); d.setAttribute('aria-hidden', 'true'); }
+    if (scrim) scrim.classList.remove('open');
+    document.body.style.overflow = '';
+    openDrawer = null;
+  }
+  // open a player's bracket in the Brackets drawer
+  function openBracketFor(name) {
+    const idx = POOL.entries.findIndex(e => e.name === name);
+    showDrawer('brackets');
+    const sel = $('pvSel');
+    if (sel && idx >= 0) { sel.value = idx; renderPlayerView(lastGood); }
   }
 
   /* ============================ main refresh ============================ */
   function renderAll(state, rows) {
-    renderStatusCards(state, rows);
-    renderTodayLive(state);
-    renderRooting(state);
-    renderRecapStrip();
-    renderRoundbar(state);
-    renderMatches(state);
-    renderPodium(rows);
-    renderLb(rows, state);
-    renderConsensusBoard(state);
-    renderMatrix(state);
-    renderBrViewToggle();
-    renderPlayerView(state);
-    renderH2H(state, rows);
-    renderBadges();
-    renderConsensus(state);
-    tickScan(); // animate any numerals that changed since the last render
+    renderTodayStory(state, rows);
+    renderHero(state, rows);
+    renderYou(state, rows);
+    renderZone2(state, rows);
+    renderGlance(rows, state);
+    updateLiveBadges(state);
+    // rebuild any currently-open / already-built drawers so they stay live
+    drawersBuilt = { matches: false, board: false, brackets: false, more: false };
+    if (openDrawer) buildDrawer(openDrawer);
+    tickScan();
   }
 
   async function refresh() {
@@ -1237,12 +1695,15 @@
       prevRanks = lastRows ? Object.fromEntries(lastRows.map(r => [r.name, r.rank])) : null;
       lastGood = state; lastRows = rows; lastRaw = raw; lastSource = source;
       currentHash = resultsHash(matches);
+      // NEW: append this snapshot to the rank-history ring buffer (powers movers + sparkline)
+      pushRankHistory(currentHash, rows);
       crownsCache = mcTry(() => MC.crowns(state, POOL.entries), null);
       badgesCache = mcTry(() => MC.badges(state, POOL.entries, crownsCache || [], rows), null);
       renderAll(state, rows);
+      // reveal the glance toolbar only for the big pool (84) — 10-pool needs no search
+      const tb = $('lbToolbar'); if (tb) tb.style.display = BIG_POOL ? '' : 'none';
       $('err').style.display = 'none';
-      $('updated').textContent = '✓ ' + new Date().toLocaleTimeString() + ' · ' + source;
-      $('countdown').style.display = '';
+      const upd = $('updated'); if (upd) upd.textContent = '✓ ' + new Date().toLocaleTimeString() + ' · ' + source;
       scheduleSim();
     } catch (e) {
       $('err').textContent = 'Could not reach the live results feed (' + e.message + '). ' + (lastGood ? 'Showing last good data.' : 'Retrying shortly.');
@@ -1251,8 +1712,10 @@
   }
 
   /* ============================ delegated event handlers (bound once) ============================ */
-  // leaderboard: expand/collapse a row, build detail lazily on first open
+  // Zone-3 glance: expand/collapse a row (build detail lazily); tap champion sub-line → bracket
   $('lb').addEventListener('click', e => {
+    const champ = e.target.closest('.ch[data-bracket]');
+    if (champ) { e.stopPropagation(); openBracketFor(champ.dataset.bracket); return; }
     const head = e.target.closest('.entry-head'); if (!head) return;
     const box = head.parentElement, n = box.dataset.name;
     const nowOpen = !box.classList.contains('open');
@@ -1267,25 +1730,65 @@
     } else openNames.delete(n);
   });
 
-  // leaderboard search
-  const lbSearchEl = $('lbSearch');
-  if (lbSearchEl) lbSearchEl.addEventListener('input', () => { lbFilter = lbSearchEl.value; applyLbFilter(); });
+  // Full-board drawer: same expand behaviour
+  $('fbLb').addEventListener('click', e => {
+    const champ = e.target.closest('.ch[data-bracket]');
+    if (champ) { e.stopPropagation(); openBracketFor(champ.dataset.bracket); return; }
+    const head = e.target.closest('.entry-head'); if (!head) return;
+    const box = head.parentElement, n = box.dataset.name;
+    const nowOpen = !box.classList.contains('open');
+    box.classList.toggle('open', nowOpen);
+    if (nowOpen) {
+      openNames.add(n);
+      if (!box.querySelector('.detail') && lastGood && lastRows) {
+        const r = lastRows.find(x => x.name === n);
+        const ent = POOL.entries.find(x => x.name === n);
+        if (r && ent) box.insertAdjacentHTML('beforeend', detailHtml(r, ent, lastGood));
+      }
+    } else openNames.delete(n);
+  });
 
-  // leaderboard sort
+  // Zone-3 glance toolbar (big pool only)
+  const lbSearchEl = $('lbSearch');
+  if (lbSearchEl) lbSearchEl.addEventListener('input', () => {
+    lbFilter = lbSearchEl.value;
+    if (lastRows && lastGood) renderGlance(lastRows, lastGood);
+  });
   const lbSortEl = $('lbSort');
   if (lbSortEl) lbSortEl.addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b) return;
     lbSort = b.dataset.sort || 'projected';
     lbSortEl.querySelectorAll('button').forEach(x => x.classList.toggle('active', x === b));
-    if (lastRows && lastGood) { renderLb(lastRows, lastGood); applyLbFilter(); }
+    if (lastRows && lastGood) renderGlance(lastRows, lastGood);
   });
-
-  // jump to me
   const jumpBtn = $('lbJumpMe');
   if (jumpBtn) {
     if (!youName) jumpBtn.style.display = 'none';
     jumpBtn.addEventListener('click', () => {
-      const row = document.querySelector('#lb .entry.you');
+      let row = document.querySelector('#lb .entry.you');
+      if (!row) { showDrawer('board', true); return; } // windowed out → use full board
+      row.style.display = '';
+      row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      row.classList.add('flash');
+      setTimeout(() => row.classList.remove('flash'), 900);
+    });
+  }
+
+  // Full-board drawer toolbar
+  const fbSearchEl = $('fbSearch');
+  if (fbSearchEl) fbSearchEl.addEventListener('input', () => { fbFilter = fbSearchEl.value; applyFbFilter(); });
+  const fbSortEl = $('fbSort');
+  if (fbSortEl) fbSortEl.addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    fbSort = b.dataset.sort || 'projected';
+    fbSortEl.querySelectorAll('button').forEach(x => x.classList.toggle('active', x === b));
+    renderFullBoard(); applyFbFilter();
+  });
+  const fbJumpBtn = $('fbJumpMe');
+  if (fbJumpBtn) {
+    if (!youName) fbJumpBtn.style.display = 'none';
+    fbJumpBtn.addEventListener('click', () => {
+      const row = document.querySelector('#fbLb .entry.you');
       if (!row) return;
       row.style.display = '';
       row.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -1301,8 +1804,6 @@
     brView = b.dataset.view || 'consensus';
     renderBrViewToggle();
   });
-
-  // bracket player search
   const brSearchEl = $('brSearch');
   if (brSearchEl) brSearchEl.addEventListener('input', () => { brFilter = brSearchEl.value; applyBrFilter(); });
 
@@ -1328,23 +1829,47 @@
     if (open && body && !body.innerHTML) body.innerHTML = stakesBodyHtml(lastGood, m);
   });
 
+  // Zone-2 mover chip → scroll-flash that player's standings row (or open full board)
+  const moverChip = $('moverChip');
+  if (moverChip) moverChip.addEventListener('click', () => {
+    const n = moverChip.dataset.name; if (!n) return;
+    let row = document.querySelector('#lb .entry[data-name="' + (window.CSS && CSS.escape ? CSS.escape(n) : n) + '"]');
+    if (!row) { openBracketFor(n); return; }
+    row.style.display = '';
+    row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    row.classList.add('flash');
+    setTimeout(() => row.classList.remove('flash'), 900);
+  });
+
+  // drawer dock pills + cards that route to a drawer
+  document.addEventListener('click', e => {
+    const opener = e.target.closest('[data-drawer]');
+    if (opener) { showDrawer(opener.dataset.drawer); return; }
+    const closeBtn = e.target.closest('[data-close]');
+    if (closeBtn) { closeDrawer(); return; }
+  });
+  // scrim + ESC close
+  const scrimEl = $('scrim');
+  if (scrimEl) scrimEl.addEventListener('click', closeDrawer);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && openDrawer) closeDrawer(); });
+
+  // view-all → full board drawer
+  const viewAllBtn = $('viewAllBtn');
+  if (viewAllBtn) viewAllBtn.addEventListener('click', () => showDrawer('board'));
+
   $('refreshBtn').onclick = refresh;
   $('digestBtn').onclick = copyDigest;
   $('recapBtn').onclick = shareRecap;
-  $('homeRecapBtn').onclick = shareRecap;
 
   /* ============================ init ============================ */
+  rankHistory = loadRankHistory();
   renderPoolSwitch();
   renderIdentity();
   fillPickers();
-  renderSimilar();
-  // place the tab indicator under the initially-active tab
-  moveTabInd(document.querySelector('.tab.active'));
-  window.addEventListener('resize', () => moveTabInd(document.querySelector('.tab.active')));
   setInterval(() => {
     secs--;
     const cd = $('countdown');
-    if (cd) { cd.textContent = '↻ ' + Math.max(secs, 0) + 's'; tickIf('countdown', cd); }
+    if (cd) { cd.textContent = Math.max(secs, 0) + 's'; tickIf('countdown', cd); }
     if (secs <= 0) refresh();
   }, 1000);
   refresh();
