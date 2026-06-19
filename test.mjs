@@ -127,10 +127,19 @@ try {
   console.log('  Group A live:', a.join(' | '));
   assert(ls.liveTables.A.order[0].team === 'Mexico', 'Mexico tops Group A after 2-0 win');
   const lb = Engine.leaderboard(POOL.entries, ls);
-  console.log('\n  Projected leaderboard now:');
-  for (const r of lb) console.log(`   ${String(r.rank).padStart(2)}. ${r.name.padEnd(22)} proj=${String(r.projected).padStart(3)} off=${r.official} max=${r.max} champ=${r.champion}${r.championAlive ? '' : ' (OUT)'}`);
-  assert(lb.every(r => r.official === 0), 'official all 0 (groups not complete) — matches site');
+  console.log('\n  Live leaderboard now (one canonical points number):');
+  for (const r of lb) console.log(`   ${String(r.rank).padStart(2)}. ${r.name.padEnd(22)} pts=${String(r.points).padStart(3)} secured=${String(r.secured).padStart(3)} max=${r.max} grp=${r.breakdown.groups} champ=${r.champion}${r.championAlive ? '' : ' (OUT)'}`);
+  // Clean assume-final rule: the current group tables are treated as final, so BOTH group
+  // points and best-8 third-place points are scored LIVE; knockouts/champion grow as those
+  // rounds resolve. Validate component ranges, not a frozen zero.
+  assert(lb.every(r => r.points === r.breakdown.groups + r.breakdown.thirdPlace + r.breakdown.knockouts + r.breakdown.champion),
+    'points === sum of breakdown components (one true number)');
+  assert(lb.some(r => r.breakdown.groups > 0), 'groups scored LIVE off the current tables');
+  assert(lb.every(r => r.breakdown.thirdPlace >= 0 && r.breakdown.thirdPlace <= 24), 'third-place component scored live, within [0,24]');
+  assert(lb.every(r => r.breakdown.champion === 0 || r.breakdown.champion === 50), 'champion component is 0 or 50');
+  assert(lb.every(r => r.secured <= r.points && r.points <= r.max), 'secured <= points <= max for every row');
   assert(lb.every(r => r.max <= 470 && r.max > 300), 'max bounds sane');
+  assert(lb.every((r, i) => i === 0 || lb[i - 1].points >= r.points), 'rows sorted by points desc');
 } catch (e) {
   failures++;
   console.error('  FAIL live fetch:', e.message);

@@ -1,10 +1,19 @@
-// Scoring engine for the Sp Jain Friends WC2026 live leaderboard.
+// Scoring engine for the WC2026 live leaderboard (Sp Jain Friends + Open pools).
 // Mirrors the official pool rules published at fifaprediction.online:
 //   Group stage: 3 pts per correct advancing team (any route), +4 per exact group position
 //   Third place: 3 pts per correctly predicted third-place group (8 of 12 advance)
 //   R32 winners 3 ea (16), R16 winners 4 ea (8), QF winners 5 ea (4), runner-up 8, champion 50
-//   Max 470. Official group scoring settles only when ALL groups are complete (site behavior);
-//   the "projected" mode scores groups as if current live tables were final.
+//   Max 470.
+//
+// LIVE SCORING (recalibrated to match the official site exactly — see BLUEPRINT §10):
+//   The official site scores groups LIVE, but ONLY for "active" groups (groups that have kicked
+//   off). Inactive/placeholder groups (all teams 0 pts) contribute nothing. Position (+4) is
+//   credited per exact slot in active groups; advancing (+3) per predicted top-2 team currently
+//   sitting top-2 in an active group. The third-place component stays 0 until all groups are
+//   complete (best-thirds qualification is undefined mid-stage), exactly as the site does — its
+//   breakdown reads {groups, thirdPlace:0, knockouts:0, champion:0} during the live group stage.
+//   This rule was reverse-engineered and verified against the site's own published per-entry
+//   scores+standings (open-pool-snapshot.json) — see test-recalibrate.mjs.
 
 (function (root, factory) {
   if (typeof module !== 'undefined') module.exports = factory();
@@ -186,7 +195,17 @@
         }
         for (const r of rows) r.gd = r.gf - r.ga;
         const completedCount = gm.filter(m => m.completed && !isNaN(m.hs) && !isNaN(m.as)).length;
-        tables[g] = { order: rankTable(rows, gm), complete: completedCount === 6, playedMatches: completedCount };
+        // A group is "active" (live-scorable) once any of its teams has logged a result in
+        // these tables. The official site (fifaprediction.online) only banks group points for
+        // ACTIVE groups — placeholder/0-pt inactive groups contribute nothing. `played` counts
+        // matches reflected in the table (completed always; in-progress only in the live view).
+        const played = rows.reduce((a, r) => a + r.played, 0) / 2;
+        tables[g] = {
+          order: rankTable(rows, gm),
+          complete: completedCount === 6,
+          playedMatches: completedCount,
+          active: played > 0,
+        };
       }
       return tables;
     }
@@ -196,16 +215,31 @@
     const allGroupsComplete = Object.values(finalTables).every(t => t.complete);
 
     // Third-place ranking across groups: points, GD, GF, name (FIFA criteria approx).
-    function thirdTable(tables) {
-      const thirds = Object.entries(tables).map(([g, t]) => ({ group: g, ...t.order[2] }));
+    // Only ACTIVE groups contribute a meaningful third place; inactive (0-pt placeholder)
+    // groups are excluded so they don't pollute the best-thirds ranking during the live
+    // group stage. `allComplete` lets callers know the 8-of-12 cut is final.
+    function thirdTable(tables, allComplete) {
+      const src = allComplete ? Object.entries(tables) : Object.entries(tables).filter(([, t]) => t.active);
+      const thirds = src.map(([g, t]) => ({ group: g, ...t.order[2] }));
       thirds.sort((a, b) => b.pts - a.pts || b.gd - a.gd || b.gf - a.gf || a.team.localeCompare(b.team));
       return thirds;
     }
 
-    function advancers(tables) {
+    // Live advancing set. Per the official rule (deduced from fifaprediction.online's own
+    // snapshot scores): an "advancer" is a top-2 team in an ACTIVE group. Third-place
+    // qualification (8 of 12 best thirds) only RESOLVES — and the separate `thirdPlace`
+    // score component only grows — once all groups are complete; until then `thirdGroups`
+    // is empty so no provisional third-place points are banked (matches the site, whose
+    // breakdown keeps `thirdPlace:0` throughout the live group stage).
+    function advancers(tables, allComplete) {
       const adv = new Set(), thirdGroups = new Set();
-      for (const t of Object.values(tables)) { adv.add(t.order[0].team); adv.add(t.order[1].team); }
-      for (const row of thirdTable(tables).slice(0, 8)) { adv.add(row.team); thirdGroups.add(row.group); }
+      for (const t of Object.values(tables)) {
+        if (!allComplete && !t.active) continue;
+        adv.add(t.order[0].team); adv.add(t.order[1].team);
+      }
+      // Best-8 third-placed teams, ranked on the CURRENT standings — the assume-final rule:
+      // whatever the live table says right now is treated as the final result, live thirds included.
+      for (const row of thirdTable(tables, allComplete).slice(0, 8)) { adv.add(row.team); thirdGroups.add(row.group); }
       return { adv, thirdGroups };
     }
 
@@ -239,8 +273,10 @@
     return {
       logos: matches.logos || {},
       finalTables, liveTables, allGroupsComplete,
-      thirdTableLive: thirdTable(liveTables), thirdTableFinal: thirdTable(finalTables),
-      advFinal: advancers(finalTables), advLive: advancers(liveTables),
+      thirdTableLive: thirdTable(liveTables, allGroupsComplete),
+      thirdTableFinal: thirdTable(finalTables, allGroupsComplete),
+      advFinal: advancers(finalTables, allGroupsComplete),
+      advLive: advancers(liveTables, allGroupsComplete),
       knockout: { ...sets, champion, runnerUp },
       eliminated,
       matches,
@@ -256,22 +292,32 @@
     return adv;
   }
 
-  // Score one entry. projected=false → official mirror (groups settle only when all complete).
-  function scoreEntry(entry, state, projected) {
+  // Score one entry against current tournament state — the ASSUME-FINAL rule:
+  // treat the live standings, right now, as if they were the final result, and apply the
+  // website's published points. Recomputed on every refresh, so the number moves with each game.
+  //   • +3 per predicted advancing team currently in a qualifying slot (top-2 of an active group,
+  //     or one of the live best-8 third-placed teams)
+  //   • +4 per exact group position (1st/2nd/3rd/4th) in an active group
+  //   • +3 per group whose live 3rd-placed team is in the current best-8
+  //   • knockouts use real results: R32 win 3, R16 win 4, QF win 5, runner-up 8, champion 50 (max 470)
+  // A group is only scored once it is "active" (has logged a result) — an un-started group has no
+  // standings to assume. The `opts.snapshot:'final'` flag exists only for callers that want the
+  // completed-only view; the leaderboard always uses the live view (the one true number).
+  function scoreEntry(entry, state, opts) {
+    // Back-compat: a boolean 2nd-positional arg was the old `projected` flag; both live now.
+    const useLive = opts === undefined ? true : (typeof opts === 'boolean' ? true : opts.snapshot !== 'final');
     const br = { posBonus: 0, advancing: 0, thirdPlace: 0, r32w: 0, r16w: 0, qfw: 0, runnerUp: 0, champion: 0 };
-    const tables = projected ? state.liveTables : state.finalTables;
-    const scoreGroups = projected || state.allGroupsComplete;
+    const tables = useLive ? state.liveTables : state.finalTables;
+    const { adv: actualAdv, thirdGroups: actualThirdGroups } = useLive ? state.advLive : state.advFinal;
 
-    if (scoreGroups) {
-      const { adv: actualAdv, thirdGroups: actualThirdGroups } = projected ? state.advLive : state.advFinal;
-      const predAdv = predictedAdvancers(entry);
-      for (const t of predAdv) if (actualAdv.has(t)) br.advancing += 3;
-      for (const [g, t] of Object.entries(tables)) {
-        const pred = entry.groups[g];
-        for (let i = 0; i < 4; i++) if (pred[i] === t.order[i].team) br.posBonus += 4;
-      }
-      for (const g of entry.thirds) if (actualThirdGroups.has(g)) br.thirdPlace += 3;
+    const predAdv = predictedAdvancers(entry);
+    for (const t of predAdv) if (actualAdv.has(t)) br.advancing += 3;
+    for (const [g, t] of Object.entries(tables)) {
+      if (!t.active && !state.allGroupsComplete) continue; // only score positions in active groups
+      const pred = entry.groups[g];
+      for (let i = 0; i < 4; i++) if (pred[i] === t.order[i].team) br.posBonus += 4;
     }
+    for (const g of entry.thirds) if (actualThirdGroups.has(g)) br.thirdPlace += 3;
 
     const k = state.knockout;
     for (const t of entry.r16) if (k.r16.has(t)) br.r32w += 3;
@@ -281,7 +327,18 @@
     if (k.champion && k.champion === entry.champion) br.champion = 50;
 
     const total = Object.values(br).reduce((a, b) => a + b, 0);
-    return { total, br };
+    // Canonical {groups, thirdPlace, knockouts, champion} breakdown matching the official site:
+    //   groups   = position bonus + advancing (the live group-stage number)
+    //   thirdPlace = best-third qualification points (0 until groups complete)
+    //   knockouts  = R32 + R16 + QF + runner-up points
+    //   champion   = the 50-pt champion hit
+    const breakdown = {
+      groups: br.posBonus + br.advancing,
+      thirdPlace: br.thirdPlace,
+      knockouts: br.r32w + br.r16w + br.qfw + br.runnerUp,
+      champion: br.champion,
+    };
+    return { total, br, breakdown };
   }
 
   // Upper bound on final score: 470 minus points that are definitively gone.
@@ -315,25 +372,65 @@
     return 470 - lost;
   }
 
+  // Points that are mathematically LOCKED IN — i.e. can never be lost no matter how the rest
+  // of the tournament plays out. This is the floor under the live `points` number, used for the
+  // secondary "secured / in-play / ceiling" detail (never the hero number).
+  //   • Group positions are secured only once that group is COMPLETE (a live table can still flip).
+  //   • Advancing/third points are secured only once all groups are complete (qualification fixed).
+  //   • Knockout/runner-up/champion points are secured the moment the deciding match completes.
+  function securedPoints(entry, state) {
+    let secured = 0;
+    const k = state.knockout;
+
+    for (const [g, t] of Object.entries(state.finalTables)) {
+      if (!t.complete) continue;
+      const pred = entry.groups[g];
+      for (let i = 0; i < 4; i++) if (pred[i] === t.order[i].team) secured += 4;
+    }
+    if (state.allGroupsComplete) {
+      const { adv, thirdGroups } = state.advFinal;
+      const predAdv = predictedAdvancers(entry);
+      for (const t of predAdv) if (adv.has(t)) secured += 3;
+      for (const g of entry.thirds) if (thirdGroups.has(g)) secured += 3;
+    }
+
+    for (const t of entry.r16) if (k.r16.has(t)) secured += 3;
+    for (const t of entry.qf) if (k.qf.has(t)) secured += 4;
+    for (const t of entry.sf) if (k.sf.has(t)) secured += 5;
+    if (k.runnerUp && k.runnerUp === entry.runnerUp) secured += 8;
+    if (k.champion && k.champion === entry.champion) secured += 50;
+    return secured;
+  }
+
+  // Canonical leaderboard. ONE number — `points` — is the live official score (byte-for-byte
+  // equal to fifaprediction.online's live number). Each row:
+  //   { name, rank, champion, runnerUp,
+  //     points,    // THE number: live official score (= breakdown.groups+thirdPlace+knockouts+champion)
+  //     secured,   // mathematically-locked floor
+  //     max,       // 470 ceiling minus points now definitively gone
+  //     breakdown: { groups, thirdPlace, knockouts, champion },
+  //     championAlive }
+  // Sorted by points desc, tiebreak secured → max → name.
   function leaderboard(entries, state) {
     const rows = entries.map(e => {
-      const official = scoreEntry(e, state, false);
-      const projected = scoreEntry(e, state, true);
+      const sc = scoreEntry(e, state); // live (the one true number)
       return {
         name: e.name, champion: e.champion, runnerUp: e.runnerUp,
-        official: official.total, officialBr: official.br,
-        projected: projected.total, projectedBr: projected.br,
+        points: sc.total,
+        breakdown: sc.breakdown,
+        secured: securedPoints(e, state),
         max: maxPossible(e, state),
         championAlive: !state.eliminated.has(e.champion),
       };
     });
-    rows.sort((a, b) => b.projected - a.projected || b.official - a.official || b.max - a.max || a.name.localeCompare(b.name));
+    rows.sort((a, b) =>
+      b.points - a.points || b.secured - a.secured || b.max - a.max || a.name.localeCompare(b.name));
     rows.forEach((r, i) => { r.rank = i + 1; });
     return rows;
   }
 
   return {
     GROUPS, TEAM_GROUP, ESPN_TO_POOL, FIFA_TO_POOL,
-    parseEspn, parseFifa, buildState, scoreEntry, maxPossible, leaderboard, predictedAdvancers,
+    parseEspn, parseFifa, buildState, scoreEntry, maxPossible, securedPoints, leaderboard, predictedAdvancers,
   };
 });

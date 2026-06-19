@@ -3,7 +3,9 @@
   "short_name": "FIFA Pro",
   "description": "Live World Cup 2026 companion for locked bracket pools",
   "display": "standalone",
+  "orientation": "portrait",
   "start_url": ".",
+  "scope": ".",
   "background_color": "#0A0E14",
   "theme_color": "#0A0E14",
   "icons": [
