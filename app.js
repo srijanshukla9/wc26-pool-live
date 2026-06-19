@@ -117,7 +117,7 @@
   /* ============================ state ============================ */
   let lastGood = null, lastRows = null, lastRaw = null, lastSource = '';
   let prevRanks = null, prevPoints = null, prevMax = null;
-  let openStakes = new Set(), activeRound = 'all';
+  let openStakes = new Set(), activeRound = 'all', scOpen = false;
   let secs = 60, inFlight = false;
   let topology = null, currentHash = null;
   let simCache = { hash: null, sim: null }, prevSim = null;
@@ -487,7 +487,11 @@
       </div>
       <div class="you-champ">Champion: ${champName} ${champState}
         ${you.rank > 1 ? `<span style="margin-left:auto;color:var(--dim);font-weight:600">−${gapTop} to leader</span>` : ''}
-      </div>`;
+      </div>
+      <button class="you-sc-btn" type="button">
+        <svg class="ico" viewBox="0 0 24 24" style="width:15px;height:15px"><path d="M9 5h6M9 9h6M9 13h4M5 3h11l3 3v15H5z"/></svg>
+        Scorecard <span class="you-sc-hint">every point traced</span>
+      </button>`;
   }
 
   function biggestMover(rows) {
@@ -618,10 +622,21 @@
     const analysis = an.text ? `<div class="ma-analysis ${an.upset ? 'upset' : ''}"><svg class="ico ai" viewBox="0 0 24 24" style="width:14px;height:14px"><path d="M12 2l2.4 7.4H22l-6 4.4 2.3 7.2L12 16.6 5.7 21l2.3-7.2-6-4.4h7.6z"/></svg><span>${an.text}</span></div>` : '';
     const venue = an.det && an.det.venue ? `<div class="ma-meta"><svg class="ico" viewBox="0 0 24 24" style="width:12px;height:12px"><path d="M12 21s-7-5.5-7-11a7 7 0 0114 0c0 5.5-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg> ${esc(an.det.venue)}</div>` : '';
 
-    return `<div class="ma-card match" data-mi="${mi}">
+    // STAKES dropdown — fills the dead space under the kickoff/venue line. Lazy (computed on first open),
+    // cached per match key. Completed matches show the realised gain/loss; upcoming/live show per-outcome.
+    const completed = m.completed && !isNaN(m.hs) && !isNaN(m.as);
+    const openStk = openStakes.has(matchKey(m));
+    let stakesHtml = '';
+    if (stakesAvailable(m)) {
+      const togLab = completed ? 'Who gained · who lost' : 'Who gains · who loses';
+      stakesHtml = `<button class="stakes-toggle" type="button">${togLab} <svg class="ico chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
+        <div class="stakes-body">${openStk ? stakesBodyHtml(state, m) : ''}</div>`;
+    }
+
+    return `<div class="ma-card match ${openStk ? 'stk-open' : ''}" data-mi="${mi}">
       <div class="ma-banner"><span class="rd">${grp}</span><span class="ma-status ${scls}">${esc(status)}</span></div>
       <div class="ma-bug"><div class="score-bug ${isLive ? 'is-live' : ''}">${left}<div class="sb-score">${mid}</div>${right}</div></div>
-      ${analysis}${impact}${venue}
+      ${analysis}${impact}${venue}${stakesHtml}
     </div>`;
   }
 
@@ -807,6 +822,211 @@
     const inner = $('cardModalInner'); if (inner) inner.innerHTML = '';
   }
 
+  /* ============================ SCORECARD — "what I predicted vs what's actually scoring" ============================
+     Tap a standings row (or the YOU-tile button) -> a slide-up sheet that reconciles, point-by-point, to the
+     entry's canonical Points. The math mirrors Engine.scoreEntry EXACTLY (the frozen rule) so the running total
+     equals scoreEntry(entry,state).total / the leaderboard row's points — this is the transparency feature.
+       • per slot in an active group: +4 if predicted team == live team at that position
+       • per predicted advancer (top-2 of any group; top-3 only for groups the entry backed as a third): +3 if
+         that team is currently in the live qualifying set (advLive.adv)
+       • per backed third-place group: +3 if it is in the live best-8 (advLive.thirdGroups)
+       • knockouts: r16 picks won R32 +3 · qf picks won R16 +4 · sf picks won QF +5 · runner-up +8 · champion +50 */
+  const GROUP_KEYS = (() => { try { return Object.keys(Engine.GROUPS); } catch (e) { return []; } })();
+
+  function buildScorecard(entry, state) {
+    const sc = Engine.scoreEntry(entry, state); // canonical — the number we must reconcile to
+    const advSet = (state.advLive && state.advLive.adv) || new Set();
+    const thirdSet = (state.advLive && state.advLive.thirdGroups) || new Set();
+    const tables = state.liveTables || {};
+    const k = state.knockout || { r16: new Set(), qf: new Set(), sf: new Set() };
+    const elim = state.eliminated || new Set();
+
+    // ---- groups ----
+    const groups = GROUP_KEYS.map(g => {
+      const pred = (entry.groups && entry.groups[g]) || [];
+      const tb = tables[g] || { order: [], active: false, complete: false };
+      const scored = tb.active || state.allGroupsComplete;
+      const backsThird = (entry.thirds || []).includes(g);
+      let sub = 0;
+      const slots = [];
+      for (let i = 0; i < 4; i++) {
+        const predTeam = pred[i];
+        const liveTeam = (tb.order[i] && tb.order[i].team) || null;
+        const posHit = scored && predTeam && liveTeam && predTeam === liveTeam; // +4 exact position
+        // a predicted-advancer slot: 1st/2nd always; 3rd only if this group is one of the entry's thirds
+        const isAdvSlot = i <= 1 || (i === 2 && backsThird);
+        const advHit = isAdvSlot && predTeam && advSet.has(predTeam); // +3 qualifying
+        let pts = 0; if (posHit) pts += 4; if (advHit) pts += 3;
+        sub += pts;
+        slots.push({ i, predTeam, liveTeam, posHit, advHit, isAdvSlot, pts, dead: predTeam && elim.has(predTeam) });
+      }
+      return { g, scored, active: tb.active, complete: tb.complete, slots, sub };
+    });
+    const groupsTotal = groups.reduce((a, x) => a + x.sub, 0);
+
+    // ---- third-place ----
+    const thirds = (entry.thirds || []).map(g => ({ g, hit: thirdSet.has(g) }));
+    const thirdTotal = thirds.filter(t => t.hit).length * 3;
+
+    // ---- knockouts ----
+    const koRow = (team, hit, val, set) => ({ team, hit, val, dead: !hit && elim.has(team) });
+    const r16 = (entry.r16 || []).map(t => koRow(t, k.r16.has(t), 3));
+    const qf = (entry.qf || []).map(t => koRow(t, k.qf.has(t), 4));
+    const sf = (entry.sf || []).map(t => koRow(t, k.sf.has(t), 5));
+    const r16Total = r16.filter(r => r.hit).length * 3;
+    const qfTotal = qf.filter(r => r.hit).length * 4;
+    const sfTotal = sf.filter(r => r.hit).length * 5;
+    const champWon = k.champion && k.champion === entry.champion;
+    const champDead = !champWon && elim.has(entry.champion);
+    const runnerWon = k.runnerUp && k.runnerUp === entry.runnerUp;
+    const runnerDead = !runnerWon && elim.has(entry.runnerUp);
+    const championPts = champWon ? 50 : 0;
+    const runnerPts = runnerWon ? 8 : 0;
+
+    const knockoutsTotal = r16Total + qfTotal + sfTotal + runnerPts;
+    const running = groupsTotal + thirdTotal + knockoutsTotal + championPts;
+    return {
+      groups, groupsTotal, thirds, thirdTotal,
+      r16, qf, sf, r16Total, qfTotal, sfTotal,
+      champion: entry.champion, champWon, champDead, championPts,
+      runnerUp: entry.runnerUp, runnerWon, runnerDead, runnerPts,
+      knockoutsTotal, running, total: sc.total, breakdown: sc.breakdown,
+    };
+  }
+
+  // slot pill: predicted team + a +4/+3/✓/✗ marker
+  function scSlot(slot) {
+    const tag = slot.posHit && slot.advHit ? `<span class="sc-pt hit">+7</span>`
+      : slot.posHit ? `<span class="sc-pt hit">+4</span>`
+      : slot.advHit ? `<span class="sc-pt hit">+3</span>`
+      : slot.dead ? `<span class="sc-pt dead">✗</span>`
+      : `<span class="sc-pt miss">·</span>`;
+    const liveTeam = slot.liveTeam;
+    const matchCls = slot.posHit ? 'pos' : (slot.advHit ? 'adv' : (slot.dead ? 'dead' : ''));
+    return `<div class="sc-slot ${matchCls}">
+      <span class="sc-pos">${slot.i + 1}</span>
+      <span class="sc-pred${slot.dead ? ' dead' : ''}">${slot.predTeam ? teamHtml(slot.predTeam) : '—'}</span>
+      <span class="sc-vs">${slot.posHit ? '=' : '→'}</span>
+      <span class="sc-live">${liveTeam ? teamHtml(liveTeam) : '<span class="sc-tbd">not started</span>'}</span>
+      ${tag}</div>`;
+  }
+  function scGroupCard(gr) {
+    const statusTag = gr.complete ? '<span class="sc-gtag done">final</span>'
+      : gr.active ? '<span class="sc-gtag live">live</span>'
+      : '<span class="sc-gtag pend">not started</span>';
+    const state = gr.complete ? 'done' : gr.active ? 'live' : 'pend';
+    // column header names the two sides once per group (PREDICTED | LIVE), aligned to the slot grid
+    const colHead = `<div class="sc-collbl"><span></span><span>Predicted</span><span></span><span>Live</span><span></span></div>`;
+    return `<div class="sc-group" data-state="${state}">
+      <div class="sc-ghead">Group ${esc(gr.g)} ${statusTag}<span class="sc-gsub">${gr.sub} pt${gr.sub === 1 ? '' : 's'}</span></div>
+      ${colHead}
+      ${gr.slots.map(scSlot).join('')}</div>`;
+  }
+  function scKoRow(label, val, r) {
+    const mark = r.hit ? `<span class="sc-pt hit">+${val}</span>` : r.dead ? `<span class="sc-pt dead">✗</span>` : `<span class="sc-pt miss">pending</span>`;
+    return `<div class="sc-korow ${r.hit ? 'hit' : r.dead ? 'dead' : ''}"><span class="sc-kteam${r.dead ? ' dead' : ''}">${teamHtml(r.team)}</span>${mark}</div>`;
+  }
+  function scKoBlock(title, val, rows) {
+    if (!rows.length) return '';
+    return `<div class="sc-koblock"><div class="sc-kohead">${esc(title)} <span class="sc-kotot">+${val} each</span></div>${rows.map(r => scKoRow(title, val, r)).join('')}</div>`;
+  }
+
+  function scorecardHtml(name) {
+    if (!lastRows || !lastGood) return '<div class="skeleton">No standings yet.</div>';
+    const r = lastRows.find(x => x.name === name);
+    const entry = POOL.entries.find(x => x.name === name);
+    if (!r || !entry) return '<div class="skeleton">Entry not found.</div>';
+    const d = buildScorecard(entry, lastGood);
+    const you = isYou(name);
+
+    // surface scoring groups first (complete -> live -> pending) so the live action wins over a wall of "not started"
+    const grpRank = gr => gr.complete ? 0 : gr.active ? 1 : 2;
+    const sortedGroups = d.groups.slice().sort((a, b) => grpRank(a) - grpRank(b) || a.g.localeCompare(b.g));
+    const pendCount = sortedGroups.filter(gr => grpRank(gr) === 2).length;
+    const scoring = sortedGroups.filter(gr => grpRank(gr) < 2);
+    const pending = sortedGroups.filter(gr => grpRank(gr) === 2);
+    const groupGrid = scoring.length
+      ? `<div class="sc-groups">${scoring.map(scGroupCard).join('')}</div>`
+        + (pending.length ? `<div class="sc-penddiv">Not started yet · ${pendCount} group${pendCount === 1 ? '' : 's'}</div><div class="sc-groups">${pending.map(scGroupCard).join('')}</div>` : '')
+      : `<div class="sc-groups">${sortedGroups.map(scGroupCard).join('')}</div>`;
+    const thirdsHtml = d.thirds.length
+      ? `<div class="sc-thirds">${d.thirds.map(t => `<span class="sc-chip ${t.hit ? 'hit' : ''}">${esc(t.g)}${t.hit ? ' +3' : ''}</span>`).join('')}</div>`
+      : '<div class="sc-empty">No third-place groups backed.</div>';
+
+    // champion / runner-up KO summary line
+    const champMark = d.champWon ? '<span class="sc-pt hit">+50</span>' : d.champDead ? '<span class="sc-pt dead">✗ out −50 ceiling</span>' : '<span class="sc-pt miss">alive</span>';
+    const runnerMark = d.runnerWon ? '<span class="sc-pt hit">+8</span>' : d.runnerDead ? '<span class="sc-pt dead">✗</span>' : '<span class="sc-pt miss">pending</span>';
+    const finalHtml = `<div class="sc-koblock">
+      <div class="sc-kohead">Champion <span class="sc-kotot">+50</span></div>
+      <div class="sc-korow ${d.champWon ? 'hit' : d.champDead ? 'dead' : ''}"><span class="sc-kteam${d.champDead ? ' dead' : ''}">${teamHtml(d.champion)}</span>${champMark}</div>
+      <div class="sc-kohead" style="margin-top:8px">Runner-up <span class="sc-kotot">+8</span></div>
+      <div class="sc-korow ${d.runnerWon ? 'hit' : d.runnerDead ? 'dead' : ''}"><span class="sc-kteam${d.runnerDead ? ' dead' : ''}">${teamHtml(d.runnerUp)}</span>${runnerMark}</div>
+    </div>`;
+
+    const koBlocks = scKoBlock('Reaches R16 (R32 winners)', 3, d.r16) + scKoBlock('Reaches QF (R16 winners)', 4, d.qf) + scKoBlock('Semifinalists (QF winners)', 5, d.sf);
+
+    // reconciliation ledger: the four section sub-totals literally add up to the canonical Points on screen
+    const ptsLabel = you ? 'your Points' : 'Points';
+    const ok = d.running === d.total;
+    const ledgerRow = (lbl, val) => `<div class="sc-ledrow"><span>${lbl}</span><b>+${val}</b></div>`;
+    const ledger = ledgerRow('Groups', d.groupsTotal)
+      + ledgerRow('Third place', d.thirdTotal)
+      + ledgerRow('Knockouts', d.knockoutsTotal)
+      + ledgerRow('Champion', d.championPts);
+    const reconc = ok
+      ? `<div class="sc-total">${ledger}
+          <div class="sc-ledsum"><span class="sc-ledeq">=</span><span class="sc-ledbig">${d.running}</span></div>
+          <div class="sc-ledcap">${ptsLabel}</div></div>`
+      : `<div class="sc-total mismatch">${ledger}
+          <div class="sc-ledsum"><span class="sc-ledeq">=</span><span class="sc-ledbig">${d.running}</span>
+            <span class="sc-warn">canonical ${ptsLabel}: ${d.total}</span></div>
+          <div class="sc-ledcap">reconciliation mismatch</div></div>`;
+
+    return `
+      <div class="sc-head">
+        <div class="sc-id">${avatar(name, 40, you ? { ring: 'var(--gold)' } : null)}
+          <div class="sc-idtxt"><div class="sc-name">${esc(cleanName(name))}${you ? '<span class="youtag">YOU</span>' : ''}</div>
+            <div class="sc-rank">#${r.rank} of ${COUNT} · ${r.secured} secured · ${r.max} ceiling</div></div>
+        </div>
+        <div class="sc-bigpts"><span class="num">${r.points}</span><span class="sc-bigl">Points</span></div>
+      </div>
+
+      <div class="sc-sectitle">Groups <span class="sc-sub">predicted order vs live · +4 exact slot, +3 advancing</span><span class="sc-sectot">${d.groupsTotal}</span></div>
+      ${groupGrid}
+
+      <div class="sc-sectitle">Third place <span class="sc-sub">backed groups currently in the live best-8</span><span class="sc-sectot">${d.thirdTotal}</span></div>
+      ${thirdsHtml}
+
+      <div class="sc-sectitle">Knockouts <span class="sc-sub">winners vs actual progress</span><span class="sc-sectot">${d.knockoutsTotal + d.championPts}</span></div>
+      ${finalHtml}
+      ${koBlocks || '<div class="sc-empty">No knockout picks scoring yet.</div>'}
+
+      ${reconc}
+      <div class="sc-foot">Live score: current tables treated as final, official pool rules applied — every point above is traceable to a pick.</div>`;
+  }
+
+  function openScorecard(name) {
+    if (!name) return;
+    const sheet = $('scorecard'); const body = $('scorecardBody'); const ttl = $('scorecardName');
+    if (!sheet || !body) return;
+    if (ttl) ttl.textContent = isYou(name) ? 'Your scorecard' : cleanName(name) + '’s scorecard';
+    body.innerHTML = scorecardHtml(name);
+    sheet.dataset.name = name;
+    sheet.classList.add('open'); sheet.setAttribute('aria-hidden', 'false');
+    const scrim = $('scrim'); if (scrim) scrim.classList.add('open');
+    document.body.style.overflow = 'hidden';
+    scOpen = true;
+  }
+  function closeScorecard() {
+    const sheet = $('scorecard'); if (!sheet) return;
+    sheet.classList.remove('open'); sheet.setAttribute('aria-hidden', 'true');
+    scOpen = false;
+    if (!openDrawer && !$('cardModal').classList.contains('open')) {
+      const scrim = $('scrim'); if (scrim) scrim.classList.remove('open');
+      document.body.style.overflow = '';
+    }
+  }
+
   /* ============================ ZONE 4 — NARRATIVE FEED + rivalry watch ============================ */
   function beatIconTone(b) {
     const tone = b.tone || 'neutral';
@@ -845,19 +1065,92 @@
   }
   function rankOf(name) { const r = lastRows && lastRows.find(x => x.name === name); return r ? r.rank : 99; }
 
-  /* ============================ match cards (Matches drawer — collapsible stakes) ============================ */
-  function stakesBodyHtml(state, m) {
+  /* ============================ stakes (who gains · who loses) — shared renderer + lazy cache ============================
+     One mechanism for BOTH the Zone-2 "Live & Recent" strip cards and the Matches-drawer cards. Lazy: MC.stakes is
+     only run on first open of a card, then cached by results-hash + matchKey so re-open is instant and a refresh
+     (new hash) invalidates it. UPCOMING/LIVE → a block per outcome (home/draw/away) with the biggest swings;
+     COMPLETED → the single block for the result that actually happened, framed as the realised gain/loss. */
+  let stakesCache = Object.create(null); // key: hash::matchKey -> html string
+  function stakesCacheKey(m) { return currentHash + '::' + matchKey(m); }
+
+  // pull the sorted, non-zero swings for one outcome's deltas map; you first-tagged
+  function swingList(deltas) {
+    return POOL.entries
+      .map(e => ({ n: e.name, d: (deltas && typeof deltas[e.name] === 'number') ? deltas[e.name] : 0 }))
+      .filter(r => r.d !== 0)
+      .sort((a, b) => Math.abs(b.d) - Math.abs(a.d) || b.d - a.d);
+  }
+  function swingRowsHtml(swings, cap) {
+    const top = swings.slice(0, cap);
+    const rows = top.map(r => {
+      const you = isYou(r.n);
+      // directional glyph carries the sign so gain/loss reads without relying on hue (matches Move-of-the-day ▲/▼)
+      return `<div class="stk-row${you ? ' you' : ''}"><span class="stk-nm">${esc(firstName(r.n))}${you ? ' <span class="stk-youtag">you</span>' : ''}</span><b class="${r.d > 0 ? 'up' : 'dn'}">${r.d > 0 ? '▲' : '▼'}${esc(Math.abs(r.d))}</b></div>`;
+    }).join('');
+    const more = swings.length - top.length;
+    return rows + (more > 0 ? `<div class="stk-more">+${more} more</div>` : '');
+  }
+  function swingSummary(swings) {
+    const g = swings.filter(s => s.d > 0).length, l = swings.filter(s => s.d < 0).length;
+    if (!g && !l) return 'no points move';
+    const parts = [];
+    if (g) parts.push(g + (g === 1 ? ' gains' : ' gain'));
+    if (l) parts.push(l + (l === 1 ? ' loses' : ' lose'));
+    return parts.join(' · ');
+  }
+  // which outcome key actually happened for a COMPLETED match
+  function resultKey(m) {
+    if (m.round === 'group') return m.hs > m.as ? 'home' : m.hs < m.as ? 'away' : 'draw';
+    return m.homeWinner ? 'home' : m.awayWinner ? 'away' : (m.hs > m.as ? 'home' : m.hs < m.as ? 'away' : 'draw');
+  }
+  // Build the stakes body for one match. Returns '' when MC is unavailable / throws (caller hides the toggle).
+  function stakesRenderHtml(state, m) {
     const stk = mcTry(() => MC.stakes(state, POOL.entries, m), null);
-    if (!stk || !stk.outcomes || !stk.outcomes.length) return '<div class="stk-out"><div class="stk-row"><span>Stakes unavailable.</span></div></div>';
+    if (!stk || !stk.outcomes || !stk.outcomes.length) return '';
+    const completed = m.completed && !isNaN(m.hs) && !isNaN(m.as);
+    if (completed) {
+      const rk = resultKey(m);
+      const out = stk.outcomes.find(o => o.key === rk) || stk.outcomes[0];
+      const swings = swingList(out.deltas);
+      const gained = swings.filter(s => s.d > 0).length;
+      // For non-group rounds a level scoreline can still have a winner (penalties/ET):
+      // mirror resultKey's fallback to m.homeWinner/m.awayWinner so KO results aren't shown as "Draw".
+      const winner = m.round !== 'group'
+        ? (m.homeWinner ? m.home : m.awayWinner ? m.away : (m.hs > m.as ? m.home : m.hs < m.as ? m.away : null))
+        : (m.hs > m.as ? m.home : m.hs < m.as ? m.away : null);
+      const head = winner
+        ? `<b>${esc(winner)}</b> won → <b class="up">${gained}</b> ${gained === 1 ? 'player' : 'players'} gained`
+        : `Draw → ${gained ? `<b class="up">${gained}</b> gained` : 'no points moved'}`;
+      const body = swings.length ? swingRowsHtml(swings, 6) : '<div class="stk-row"><span class="stk-nm">No points moved</span><b>±0</b></div>';
+      const winStyle = winner ? ` style="--team:${teamHex(winner)}"` : ' style="--team:var(--dim)"';
+      return `<div class="stk-result">${head}</div><div class="stk-out${winner ? ' done' : ''}"${winStyle}>${body}</div>`;
+    }
+    // upcoming / live — one block per outcome, each tinted with its team color + crest so it ties to the score-bug
     return stk.outcomes.map(o => {
-      const rs = POOL.entries.map(e => ({ n: e.name, d: (o.deltas && typeof o.deltas[e.name] === 'number') ? o.deltas[e.name] : 0 }))
-        .filter(r => r.d !== 0).sort((a, b) => Math.abs(b.d) - Math.abs(a.d)).slice(0, 8);
-      const inner = rs.length
-        ? rs.map(r => `<div class="stk-row"><span>${esc(firstName(r.n))}</span><b class="${r.d > 0 ? 'up' : 'dn'}">${esc(fmtSigned(r.d))}</b></div>`).join('')
-        : '<div class="stk-row"><span>No points move</span><b>±0</b></div>';
-      return `<div class="stk-out"><div class="stk-lab">${esc(o.label)}</div>${inner}</div>`;
+      const swings = swingList(o.deltas);
+      const sideTeam = o.key === 'home' ? (m.home || '') : o.key === 'away' ? (m.away || '') : '';
+      const teamStyle = sideTeam ? ` style="--team:${teamHex(sideTeam)}"` : ' style="--team:var(--dim)"';
+      const lab = o.key === 'draw'
+        ? 'Draw'
+        : `If ${crest(sideTeam)} ${esc(sideTeam || (o.key === 'home' ? 'Home' : 'Away'))} win`;
+      const body = swings.length ? swingRowsHtml(swings, 5) : '<div class="stk-row"><span class="stk-nm">No points move</span><b>±0</b></div>';
+      return `<div class="stk-out"${teamStyle}><div class="stk-lab"><span>${lab}</span><span class="stk-sum">${esc(swingSummary(swings))}</span></div>${body}</div>`;
     }).join('');
   }
+  // cached entry point used by the toggle handlers
+  function stakesBodyHtml(state, m) {
+    const key = stakesCacheKey(m);
+    if (stakesCache[key] != null) return stakesCache[key];
+    const html = stakesRenderHtml(state, m) || '<div class="stk-out"><div class="stk-row"><span class="stk-nm">Stakes unavailable.</span></div></div>';
+    stakesCache[key] = html;
+    return html;
+  }
+  // Cheap guard for whether to render the toggle at all — never runs MC.stakes upfront (that is lazy,
+  // on first open). We show the toggle whenever MC is present and the card carries two teams; if the
+  // lazy computation later yields nothing the body degrades to an "unavailable" line.
+  function stakesAvailable(m) { return hasMC() && !!m.home && !!m.away; }
+
+  /* ============================ match cards (Matches drawer — collapsible stakes) ============================ */
   function matchCardHtml(m, state, mi) {
     const grp = m.round === 'group'
       ? 'Group ' + (Engine.TEAM_GROUP[m.home] || '') + (m.detail ? ' · ' + esc(m.detail) : '')
@@ -882,10 +1175,11 @@
       calledHtml = `<div class="m-called"><span class="pin bad">✗</span> Nobody backed ${esc(called.winner)}</div>`;
     }
     let stakesHtml = '';
-    const upcoming = m.state === 'pre' || m.state === 'in';
+    const completed = m.completed && !isNaN(m.hs) && !isNaN(m.as);
     const openStk = openStakes.has(matchKey(m));
-    if (upcoming && hasMC()) {
-      stakesHtml = `<button class="stakes-toggle" type="button">Stakes for the pool <svg class="ico chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
+    if (stakesAvailable(m)) {
+      const togLab = completed ? 'Who gained · who lost' : 'Who gains · who loses';
+      stakesHtml = `<button class="stakes-toggle" type="button">${togLab} <svg class="ico chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
         <div class="stakes-body">${openStk ? stakesBodyHtml(state, m) : ''}</div>`;
     }
     const openCls = openStk ? 'stk-open' : '';
@@ -1381,6 +1675,7 @@
     renderGlance(rows, state);
     renderMatchStrip(state);
     updateLiveBadges(state);
+    stakesCache = Object.create(null); // results changed -> stale stakes; recomputed lazily on next open
     drawersBuilt = { matches: false, board: false, brackets: false, titlerace: false, more: false };
     if (openDrawer) buildDrawer(openDrawer);
     tickScan();
@@ -1415,24 +1710,24 @@
   }
 
   /* ============================ delegated event handlers (bound once) ============================ */
-  // Zone-3 board: click a card-row -> expand into the full holo card modal; champion sub-line is part of the card now.
+  // Zone-3 board: click a card-row -> open that entry's SCORECARD (predicted vs scoring, reconciles to Points).
   $('lb').addEventListener('click', e => {
     const row = e.target.closest('.card-row[data-name]'); if (!row) return;
-    openCardModal(row.dataset.name);
+    openScorecard(row.dataset.name);
   });
   $('lb').addEventListener('keydown', e => {
     if (e.key !== 'Enter' && e.key !== ' ') return;
     const row = e.target.closest('.card-row[data-name]'); if (!row) return;
-    e.preventDefault(); openCardModal(row.dataset.name);
+    e.preventDefault(); openScorecard(row.dataset.name);
   });
   $('fbLb').addEventListener('click', e => {
     const row = e.target.closest('.card-row[data-name]'); if (!row) return;
-    openCardModal(row.dataset.name);
+    openScorecard(row.dataset.name);
   });
   $('fbLb').addEventListener('keydown', e => {
     if (e.key !== 'Enter' && e.key !== ' ') return;
     const row = e.target.closest('.card-row[data-name]'); if (!row) return;
-    e.preventDefault(); openCardModal(row.dataset.name);
+    e.preventDefault(); openScorecard(row.dataset.name);
   });
 
   // card modal close
@@ -1489,20 +1784,29 @@
   // matches round filter
   $('roundbar').addEventListener('click', e => { const c = e.target.closest('.rchip'); if (!c || !lastGood) return; activeRound = c.dataset.r; renderRoundbar(lastGood); renderMatches(lastGood); });
 
-  // match stakes toggle (Matches drawer)
-  $('matchwrap').addEventListener('click', e => {
-    const b = e.target.closest('.stakes-toggle'); if (!b || !lastGood) return;
-    const card = b.closest('.match'); if (!card) return;
+  // shared stakes-toggle handler: lazily fills + caches the body on first open (Matches drawer + Zone-2 strip)
+  function toggleStakes(card) {
+    if (!card || !lastGood) return;
     const mi = +card.dataset.mi; const m = lastGood.matches[mi]; if (!m) return;
     const key = matchKey(m); const open = !openStakes.has(key);
     if (open) openStakes.add(key); else openStakes.delete(key);
     card.classList.toggle('stk-open', open);
     const body = card.querySelector('.stakes-body');
     if (open && body && !body.innerHTML) body.innerHTML = stakesBodyHtml(lastGood, m);
+  }
+
+  // match stakes toggle (Matches drawer)
+  $('matchwrap').addEventListener('click', e => {
+    const b = e.target.closest('.stakes-toggle'); if (!b) return;
+    toggleStakes(b.closest('.match'));
   });
 
-  // Zone-2 strip: tap a match card -> open Matches drawer
-  $('matchStrip').addEventListener('click', () => showDrawer('matches'));
+  // Zone-2 strip: tap the stakes toggle -> expand stakes in place; tap anywhere else on the card -> Matches drawer
+  $('matchStrip').addEventListener('click', e => {
+    const b = e.target.closest('.stakes-toggle');
+    if (b) { e.stopPropagation(); toggleStakes(b.closest('.match')); return; }
+    showDrawer('matches');
+  });
 
   // Move-of-the-day tile -> scroll-flash that player's row (or open their bracket)
   const moveTile = $('moveTile');
@@ -1519,12 +1823,17 @@
     const opener = e.target.closest('[data-drawer]'); if (opener) { showDrawer(opener.dataset.drawer); return; }
     const closeBtn = e.target.closest('[data-close]'); if (closeBtn) { closeDrawer(); return; }
   });
-  const scrimEl = $('scrim'); if (scrimEl) scrimEl.addEventListener('click', closeDrawer);
+  const scrimEl = $('scrim'); if (scrimEl) scrimEl.addEventListener('click', () => { if (scOpen) closeScorecard(); else closeDrawer(); });
   document.addEventListener('keydown', e => {
     if (e.key !== 'Escape') return;
     if ($('cardModal').classList.contains('open')) { closeCardModal(); return; }
+    if (scOpen) { closeScorecard(); return; }
     if (openDrawer) closeDrawer();
   });
+  // scorecard close button + YOU-tile "Scorecard" button (delegated — the tile re-renders each refresh)
+  const scCloseEl = $('scorecardClose'); if (scCloseEl) scCloseEl.addEventListener('click', closeScorecard);
+  const youTileEl = $('youTile');
+  if (youTileEl) youTileEl.addEventListener('click', e => { if (e.target.closest('.you-sc-btn') && youName) openScorecard(youName); });
 
   const viewAllBtn = $('viewAllBtn'); if (viewAllBtn) viewAllBtn.addEventListener('click', () => showDrawer('board'));
   $('refreshBtn').onclick = refresh;

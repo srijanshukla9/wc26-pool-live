@@ -527,14 +527,127 @@ h2.sec{ font-family:var(--f-ui); font-size:11px; font-weight:800; letter-spacing
 .m-called b{ color:var(--ink); font-variant-numeric:tabular-nums; }
 .stakes-toggle{ display:flex; align-items:center; gap:6px; width:calc(100% - 28px); margin:8px 14px 12px; text-align:left;
   background:var(--surface-2); border:1px solid var(--line); border-radius:var(--r-sm); padding:7px 11px; font-size:11.5px; font-weight:700; color:var(--ink-2); cursor:pointer; }
-.stakes-toggle:hover{ color:var(--ink); } .stakes-toggle .chev{ margin-left:auto; transition:transform .2s ease; }
+.stakes-toggle:hover{ color:var(--ink); } .stakes-toggle .chev{ margin-left:auto; flex:0 0 auto; transition:transform .2s ease; }
 .match.stk-open .stakes-toggle .chev{ transform:rotate(180deg); }
 .stakes-body{ display:none; margin:0 14px 12px; } .match.stk-open .stakes-body{ display:block; }
-.stk-out{ background:var(--surface-2); border:1px solid var(--line); border-radius:var(--r-sm); padding:8px 11px; margin-bottom:8px; }
-.stk-out .stk-lab{ font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.05em; color:var(--ink); margin-bottom:5px; }
-.stk-row{ display:flex; justify-content:space-between; font-size:12px; padding:2px 0; color:var(--dim); }
-.stk-row b{ font-family:var(--f-num); font-weight:700; font-variant-numeric:tabular-nums; }
+.stk-out{ position:relative; background:var(--surface-2); border:1px solid var(--line); border-radius:var(--r-sm); padding:8px 11px 8px 14px; margin-bottom:8px; }
+/* left team-color rail ties each outcome to its team (matches the score-bug language) */
+.stk-out::before{ content:''; position:absolute; left:0; top:0; bottom:0; width:3px; border-radius:999px;
+  background:color-mix(in srgb,var(--team,var(--line)) 75%, #fff 0%); }
+.stk-out.done{ border-color:color-mix(in srgb,var(--win) 40%, var(--line)); background:color-mix(in srgb,var(--win) 7%, var(--surface-2)); }
+.stk-out .stk-lab{ display:flex; align-items:center; gap:8px; font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.05em;
+  color:color-mix(in srgb,var(--team,var(--ink)) 62%, var(--ink) 38%); margin-bottom:5px; }
+.stk-out .stk-lab .crest{ width:14px; height:14px; border-radius:50%; object-fit:cover; vertical-align:-2px; flex:0 0 auto; }
+.stk-out .stk-lab .crest-e{ font-size:12px; line-height:1; vertical-align:-1px; }
+.stk-out .stk-lab > span:first-child{ min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.stk-sum{ margin-left:auto; flex:0 0 auto; font-family:var(--f-num); font-weight:700; font-size:10px; letter-spacing:0; text-transform:none; color:var(--dim); font-variant-numeric:tabular-nums; }
+/* completed-match result headline above the realised gain/loss block */
+.stk-result{ font-size:12px; color:var(--ink-2); margin:0 0 8px; line-height:1.4; }
+.stk-result b{ color:var(--ink); font-family:var(--f-num); font-weight:800; font-variant-numeric:tabular-nums; }
+.stk-result b.up{ color:var(--win); }
+.stk-row{ display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:12px; padding:2px 0; color:var(--dim); }
+.stk-row .stk-nm{ min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.stk-row.you{ color:var(--ink); font-weight:700; }
+.stk-youtag{ font-family:var(--f-ui); font-size:8px; font-weight:800; letter-spacing:.04em; text-transform:uppercase; background:var(--gold); color:var(--gold-ink); padding:1px 5px; border-radius:4px; vertical-align:middle; }
+.stk-row b{ flex:0 0 auto; font-family:var(--f-num); font-weight:800; font-variant-numeric:tabular-nums; letter-spacing:-.01em; }
 .stk-row b.up{ color:var(--win); } .stk-row b.dn{ color:var(--loss); }
+.stk-more{ font-size:10.5px; color:var(--dim); padding-top:3px; font-weight:600; }
+
+/* ============================================================ SCORECARD (predicted vs scoring) */
+/* YOU-tile trigger */
+.you-sc-btn{ display:flex; align-items:center; gap:8px; width:100%; margin-top:13px; cursor:pointer;
+  font-family:var(--f-ui); font-size:12.5px; font-weight:700; color:var(--gold-ink);
+  background:var(--gold); border:none; border-radius:var(--r-sm); padding:9px 12px; box-shadow:var(--spec); }
+.you-sc-btn:hover{ filter:brightness(1.05); }
+.you-sc-btn .ico{ flex:0 0 auto; }
+.you-sc-hint{ margin-left:auto; font-size:10px; font-weight:700; opacity:.75; }
+@media (max-width:560px){ .you-sc-hint{ display:none; } }
+
+/* the sheet reuses .drawer chrome (slide-up + shared scrim) */
+.scorecard .drawer-body{ padding-top:14px; }
+.sc-head{ display:flex; align-items:center; gap:14px; padding-bottom:14px; margin-bottom:16px; border-bottom:1px solid var(--line); }
+.sc-id{ display:flex; align-items:center; gap:11px; min-width:0; }
+.sc-idtxt{ min-width:0; }
+.sc-name{ font-family:var(--f-disp); font-weight:800; font-size:18px; letter-spacing:-.01em; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.sc-rank{ font-size:11.5px; color:var(--dim); margin-top:2px; font-variant-numeric:tabular-nums; }
+.sc-bigpts{ margin-left:auto; flex:0 0 auto; display:flex; flex-direction:column; align-items:flex-end; line-height:.9; }
+.sc-bigpts .num{ font-family:var(--f-num); font-weight:900; font-size:42px; letter-spacing:-.02em; color:var(--gold); font-variant-numeric:tabular-nums; }
+.sc-bigl{ font-size:9px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:var(--dim); margin-top:3px; }
+
+.sc-sectitle{ display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; margin:20px 0 11px;
+  font-family:var(--f-ui); font-size:11px; font-weight:800; letter-spacing:.1em; text-transform:uppercase; color:var(--gold-soft); }
+.sc-sectitle .sc-sub{ font-size:10.5px; font-weight:600; letter-spacing:0; text-transform:none; color:var(--dim); }
+.sc-sectot{ margin-left:auto; font-family:var(--f-num); font-weight:900; font-size:18px; color:var(--ink); font-variant-numeric:tabular-nums; letter-spacing:-.01em; }
+
+.sc-groups{ display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:13px; }
+@media (max-width:560px){ .sc-groups{ grid-template-columns:1fr; } }
+.sc-group{ background:var(--surface); border:1px solid var(--line); border-radius:var(--r-md); padding:11px 13px; box-shadow:var(--shadow-sm); }
+/* pending groups recede so live/final groups visually win the sheet */
+.sc-group[data-state="pend"]{ padding:9px 13px; opacity:.62; background:transparent; box-shadow:none; }
+.sc-group[data-state="pend"] .sc-collbl{ display:none; }
+/* thin divider before the not-started block */
+.sc-penddiv{ margin:16px 0 10px; font-family:var(--f-ui); font-size:10px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:var(--dim);
+  display:flex; align-items:center; gap:10px; }
+.sc-penddiv::after{ content:''; flex:1; height:1px; background:var(--line); }
+.sc-ghead{ display:flex; align-items:center; gap:8px; font-family:var(--f-disp); font-weight:800; font-size:13px; margin-bottom:8px; }
+.sc-gsub{ margin-left:auto; font-family:var(--f-num); font-weight:800; font-size:12px; color:var(--ink-2); font-variant-numeric:tabular-nums; }
+.sc-gtag{ font-family:var(--f-ui); font-size:8.5px; font-weight:800; letter-spacing:.05em; text-transform:uppercase; padding:2px 6px; border-radius:999px; }
+.sc-gtag.done{ color:var(--win); background:color-mix(in srgb,var(--win) 16%, transparent); }
+.sc-gtag.live{ color:#ffd6df; background:rgba(255,45,85,.16); }
+.sc-gtag.pend{ color:var(--dim); background:var(--surface-2); }
+/* column header — names the two sides once per group, aligned to the slot grid below */
+.sc-collbl{ display:grid; grid-template-columns:16px minmax(0,1fr) 14px minmax(0,1fr) auto; gap:6px;
+  font-size:8.5px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:var(--dim); padding:0 0 5px; margin-bottom:2px; border-bottom:1px solid var(--line-soft); }
+.sc-collbl > span:nth-child(2){ padding-left:8px; } /* align under the predicted chip's inset */
+/* one predicted-vs-live slot row */
+.sc-slot{ display:grid; grid-template-columns:16px minmax(0,1fr) 14px minmax(0,1fr) auto; align-items:center; gap:6px;
+  font-size:12px; padding:3px 0; border-top:1px solid var(--line-soft); border-radius:5px; }
+.sc-slot:first-of-type{ border-top:none; }
+/* a banked exact-position slot is a solid green band the eye catches immediately */
+.sc-slot.pos{ background:color-mix(in srgb,var(--win) 9%, transparent); border-top-color:transparent; padding:3px 5px; }
+.sc-slot.pos + .sc-slot{ border-top-color:transparent; }
+.sc-pos{ font-family:var(--f-num); font-weight:800; font-size:12px; color:var(--dim); text-align:center; }
+.sc-pred,.sc-live{ min-width:0; display:flex; align-items:center; gap:5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+/* PREDICTED side reads as a chip (the user's pick); LIVE side is plain table text */
+.sc-pred{ background:var(--faint,var(--surface-3)); border-radius:5px; padding:2px 7px; font-weight:700; color:var(--ink); }
+.sc-pred.dead,.sc-kteam.dead{ color:var(--loss); text-decoration:line-through; opacity:.8; }
+.sc-vs{ text-align:center; color:var(--dim); font-weight:700; font-size:11px; }
+.sc-slot.pos .sc-vs{ color:var(--win); }
+.sc-slot.pos .sc-pred{ background:color-mix(in srgb,var(--win) 18%, transparent); color:var(--win); }
+.sc-live{ color:var(--ink-2); } .sc-tbd{ color:var(--dim); font-style:italic; }
+.sc-pt{ flex:0 0 auto; justify-self:end; font-family:var(--f-num); font-weight:800; font-size:12px; font-variant-numeric:tabular-nums; min-width:30px; text-align:right; }
+.sc-pt.hit{ color:var(--win); } .sc-pt.dead{ color:var(--loss); font-weight:700; font-size:10.5px; } .sc-pt.miss{ color:var(--dim); }
+
+/* third place chips */
+.sc-thirds{ display:flex; flex-wrap:wrap; gap:7px; }
+.sc-chip{ display:inline-flex; align-items:center; gap:4px; background:var(--surface-3); border-radius:6px; padding:4px 10px; font-size:12px; font-weight:700; color:var(--ink-2); }
+.sc-chip.hit{ background:color-mix(in srgb,var(--win) 18%, var(--surface)); color:var(--win); }
+.sc-empty{ font-size:12px; color:var(--dim); padding:2px 0; }
+
+/* knockout blocks */
+.sc-koblock{ background:var(--surface); border:1px solid var(--line); border-radius:var(--r-md); padding:11px 13px; margin-bottom:10px; box-shadow:var(--shadow-sm); }
+.sc-kohead{ display:flex; align-items:baseline; gap:8px; font-family:var(--f-ui); font-size:10px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-2); margin-bottom:6px; }
+.sc-kotot{ margin-left:auto; font-weight:700; letter-spacing:0; text-transform:none; color:var(--dim); }
+.sc-korow{ display:flex; align-items:center; gap:8px; font-size:12.5px; padding:3px 0; border-top:1px solid var(--line-soft); }
+.sc-korow:first-of-type{ border-top:none; }
+.sc-kteam{ min-width:0; display:flex; align-items:center; gap:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.sc-korow .sc-pt{ margin-left:auto; }
+
+/* reconciliation ledger — the section sub-totals visibly sum to the big gold number */
+.sc-total{ margin-top:18px; padding:14px 18px 16px; background:linear-gradient(180deg,var(--hl-bg),var(--surface));
+  border:1px solid var(--hl-line); border-radius:var(--r-md); }
+.sc-total.mismatch{ border-color:var(--loss); }
+.sc-ledrow{ display:flex; align-items:baseline; justify-content:space-between; gap:12px; padding:4px 0; font-size:12.5px; color:var(--ink-2); }
+.sc-ledrow span{ font-weight:700; letter-spacing:.01em; }
+.sc-ledrow b{ font-family:var(--f-num); font-weight:800; font-size:14px; color:var(--ink); font-variant-numeric:tabular-nums; }
+.sc-ledsum{ display:flex; align-items:center; justify-content:flex-end; gap:10px; flex-wrap:wrap;
+  margin-top:8px; padding-top:10px; border-top:2px solid var(--hl-line); }
+.sc-ledeq{ font-family:var(--f-num); font-weight:800; font-size:22px; color:var(--dim); }
+.sc-ledbig{ font-family:var(--f-num); font-weight:900; font-size:38px; line-height:.9; letter-spacing:-.02em; color:var(--gold); font-variant-numeric:tabular-nums; }
+.sc-total.mismatch .sc-ledbig{ color:var(--loss); }
+.sc-ledcap{ text-align:right; margin-top:4px; font-size:9px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:var(--dim); }
+.sc-warn{ flex:0 0 100%; text-align:right; color:var(--loss); font-size:12px; font-weight:700; }
+.sc-foot{ margin-top:12px; font-size:11px; color:var(--dim); line-height:1.5; font-style:italic; text-align:center; }
 .roundbar{ display:flex; gap:7px; overflow-x:auto; padding-bottom:12px; scrollbar-width:none; }
 .roundbar::-webkit-scrollbar{ display:none; }
 .rchip{ flex:0 0 auto; font-size:13px; font-weight:700; padding:7px 14px; border-radius:999px; border:1px solid var(--line); background:var(--surface); color:var(--ink-2); cursor:pointer; }
@@ -1073,6 +1186,15 @@ footer .meta{ text-align:center; font-size:12px; color:var(--dim); }
       and marks are deliberately not used.
     </div>
   </div>
+</aside>
+
+<!-- SCORECARD sheet (slide-up; reuses the shared scrim) -->
+<aside class="drawer scorecard" id="scorecard" aria-hidden="true" role="dialog" aria-label="Scorecard">
+  <span class="drawer-grip"></span>
+  <div class="drawer-head"><h3 id="scorecardName">Scorecard</h3>
+    <button class="dclose" id="scorecardClose" aria-label="Close"><svg class="ico" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  </div>
+  <div class="drawer-body" id="scorecardBody"><div class="skeleton">Building the scorecard&hellip;</div></div>
 </aside>
 
 <!-- LOAD ORDER (BLUEPRINT §3): data -> engine -> ratings -> viz -> players -> mc -> charts -> narrative -> cards -> app -->

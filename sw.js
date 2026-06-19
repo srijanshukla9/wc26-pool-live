@@ -1,15 +1,16 @@
 /* FIFA Prediction Pro — service worker (BLUEPRINT §11)
-   App-shell caching for offline + instant repeat loads. Strategy:
-     • App shell (HTML/JS/CSS/manifest/icon): cache-first, refreshed in the
-       background (stale-while-revalidate) so a new deploy lands next open.
+   Strategy (online-first app, frequently deployed):
+     • App shell (HTML/JS/CSS/manifest/icon): NETWORK-FIRST — always serve the
+       latest code when online, fall back to cache only when offline. This means
+       a new deploy lands immediately, never "one reload behind".
      • Assets (flagcdn flags, ESPN crests, Wikimedia player photos, fonts):
        cache-first (immutable / hash-pathed URLs — safe to keep forever).
      • Live feed (ESPN scoreboard / FIFA fallback): network-first, never cached
        as truth (only a last-good fallback when fully offline).
-   No build step; pure static. Bump CACHE on any shell change to invalidate. */
+   No build step; pure static. Bump VERSION on any shell change to purge old caches. */
 'use strict';
 
-var VERSION = 'fpp-v1';
+var VERSION = 'fpp-v2';
 var SHELL_CACHE = VERSION + '-shell';
 var ASSET_CACHE = VERSION + '-assets';
 var FEED_CACHE = VERSION + '-feed';
@@ -91,18 +92,18 @@ self.addEventListener('fetch', function (e) {
     return;
   }
 
-  // 3) SHELL — stale-while-revalidate (instant load, background refresh).
+  // 3) SHELL — network-first: always serve the latest code when online; the cache
+  //    is only an offline fallback. Guarantees a new deploy is seen immediately.
   if (isShell(url)) {
     e.respondWith(
-      caches.match(req).then(function (hit) {
-        var net = fetch(req).then(function (res) {
-          if (res && res.ok) {
-            var copy = res.clone();
-            caches.open(SHELL_CACHE).then(function (c) { c.put(req, copy); });
-          }
-          return res;
-        }).catch(function () { return hit; });
-        return hit || net;
+      fetch(req).then(function (res) {
+        if (res && res.ok) {
+          var copy = res.clone();
+          caches.open(SHELL_CACHE).then(function (c) { c.put(req, copy); });
+        }
+        return res;
+      }).catch(function () {
+        return caches.match(req); // offline → last cached shell
       })
     );
   }
