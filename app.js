@@ -827,8 +827,8 @@
      entry's canonical Points. The math mirrors Engine.scoreEntry EXACTLY (the frozen rule) so the running total
      equals scoreEntry(entry,state).total / the leaderboard row's points — this is the transparency feature.
        • per slot in an active group: +4 if predicted team == live team at that position
-       • per predicted advancer (top-2 of any group; top-3 only for groups the entry backed as a third): +3 if
-         that team is currently in the live qualifying set (advLive.adv)
+       • per predicted advancer (your TOP-3 picks in every group; the 4th never counts): +3 if that
+         team is currently in the live qualifying set (advLive.adv) — matches the official site
        • per backed third-place group: +3 if it is in the live best-8 (advLive.thirdGroups)
        • knockouts: r16 picks won R32 +3 · qf picks won R16 +4 · sf picks won QF +5 · runner-up +8 · champion +50 */
   const GROUP_KEYS = (() => { try { return Object.keys(Engine.GROUPS); } catch (e) { return []; } })();
@@ -853,8 +853,9 @@
         const predTeam = pred[i];
         const liveTeam = (tb.order[i] && tb.order[i].team) || null;
         const posHit = scored && predTeam && liveTeam && predTeam === liveTeam; // +4 exact position
-        // a predicted-advancer slot: 1st/2nd always; 3rd only if this group is one of the entry's thirds
-        const isAdvSlot = i <= 1 || (i === 2 && backsThird);
+        // a predicted-advancer slot = your top-3 predicted picks (1st/2nd/3rd); the 4th never
+        // earns advancing. Matches Engine.predictedAdvancers + the official site's row rule.
+        const isAdvSlot = i <= 2;
         const advHit = isAdvSlot && predTeam && advSet.has(predTeam); // +3 qualifying
         let pts = 0; if (posHit) pts += 4; if (advHit) pts += 3;
         sub += pts;

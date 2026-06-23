@@ -283,11 +283,15 @@
     };
   }
 
+  // Advancing CANDIDATES = your predicted 1st, 2nd AND 3rd in every group. The official
+  // site awards +3 "advancing" for any of your top-3 predicted teams that is currently in a
+  // qualifying slot (top-2, or a best-8 third) — regardless of your separate third-place-group
+  // pick. Your 4th-row pick never earns advancing. (Verified row-by-row against the official's
+  // own scorecard; this includes the 3rd-row pick in groups NOT in entry.thirds.)
   function predictedAdvancers(entry) {
     const adv = new Set();
-    for (const [g, order] of Object.entries(entry.groups)) {
-      adv.add(order[0]); adv.add(order[1]);
-      if (entry.thirds.includes(g)) adv.add(order[2]);
+    for (const order of Object.values(entry.groups)) {
+      adv.add(order[0]); adv.add(order[1]); adv.add(order[2]);
     }
     return adv;
   }
@@ -353,13 +357,27 @@
     }
 
     const predAdv = predictedAdvancers(entry);
+    // ADVANCING (component max 96 = 32 advancing teams x3). A candidate keeps its +3 once its
+    // team advances from the group — a later knockout loss does NOT remove it — so use GROUP-only
+    // elimination here, not tournament-wide eliminated (which includes KO losers). Cap at 96:
+    // a bracket lists up to 36 top-3 candidates, and the surplus that can never all advance must
+    // not be counted as "lost" against the 96 ceiling.
+    const groupOut = new Set();
+    for (const t of Object.values(state.finalTables)) {
+      if (t.complete) groupOut.add(t.order[3].team); // 4th in a finished group is out
+    }
     if (state.allGroupsComplete) {
-      const { adv, thirdGroups } = state.advFinal;
-      for (const t of predAdv) if (!adv.has(t)) lost += 3;
+      for (const [g, t] of Object.entries(state.finalTables))
+        if (!state.advFinal.thirdGroups.has(g)) groupOut.add(t.order[2].team); // non-best-8 thirds out
+    }
+    let advAlive = 0;
+    for (const t of predAdv) if (!groupOut.has(t)) advAlive++;
+    lost += 96 - Math.min(96, advAlive * 3);
+    // THIRD-PLACE GROUPS (separate max 24): a correct third-place-group pick is only a sure loss
+    // once all groups complete and that group isn't in the final best-8.
+    if (state.allGroupsComplete) {
+      const { thirdGroups } = state.advFinal;
       for (const g of entry.thirds) if (!thirdGroups.has(g)) lost += 3;
-    } else {
-      // before that, only a 4th-place finish in a completed group is a sure loss
-      for (const t of predAdv) if (state.eliminated.has(t)) lost += 3;
     }
 
     for (const t of entry.r16) if (state.eliminated.has(t) && !k.r16.has(t)) lost += 3;
