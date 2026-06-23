@@ -10,7 +10,7 @@
    No build step; pure static. Bump VERSION on any shell change to purge old caches. */
 'use strict';
 
-var VERSION = 'fpp-v2';
+var VERSION = 'fpp-v3';
 var SHELL_CACHE = VERSION + '-shell';
 var ASSET_CACHE = VERSION + '-assets';
 var FEED_CACHE = VERSION + '-feed';
