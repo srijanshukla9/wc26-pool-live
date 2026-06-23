@@ -18,6 +18,21 @@
 (function () {
   'use strict';
 
+  /* ============================ Tier-2 refraction feature test (GLASS-SPEC §2.6) ============================
+     Add .has-refract to <html> only when backdrop-filter:url() is honoured, the viewport isn't tiny, and the
+     device has ≥4 cores. Runs before first render; absence of refraction is invisible (Tier-1 still ships). */
+  (function () {
+    try {
+      var t = document.createElement('div');
+      t.style.backdropFilter = 'url(#lg)';
+      if ((t.style.backdropFilter || '').indexOf('url') >= 0
+        && !matchMedia('(max-width:560px)').matches
+        && (navigator.hardwareConcurrency || 4) >= 4) {
+        document.documentElement.classList.add('has-refract');
+      }
+    } catch (e) {}
+  })();
+
   /* ============================ helpers ============================ */
   const FLAGS = {
     'Mexico':'🇲🇽','South Korea':'🇰🇷','Czech Rep.':'🇨🇿','South Africa':'🇿🇦','Canada':'🇨🇦',
@@ -83,6 +98,17 @@
   const REDUCE_MOTION = (() => { try { return matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; } })();
   let tickPrev = Object.create(null);
   function fireTick(el) { el.classList.remove('tick'); void el.offsetWidth; el.classList.add('tick'); }
+  // specular sweep across a glass number on value change (hero win% + Road odds %) — §3 wow #1/#3
+  function fireSweep(el) { if (!el || REDUCE_MOTION) return; el.classList.remove('sweep'); void el.offsetWidth; el.classList.add('sweep'); }
+  function sweepIf(key, el) {
+    if (!el) return;
+    const val = el.textContent;
+    const had = Object.prototype.hasOwnProperty.call(tickPrev, 'sweep:' + key);
+    const prev = tickPrev['sweep:' + key];
+    tickPrev['sweep:' + key] = val;
+    if (REDUCE_MOTION || !had || prev === val) return;
+    fireSweep(el);
+  }
   function tickIf(key, el) {
     if (!el) return;
     const val = el.textContent;
@@ -95,7 +121,10 @@
   }
   function tickScan() {
     tickIf('hero:pts', document.querySelector('#heroTile .fc-overall__pts'));
-    tickIf('hero:win', document.querySelector('#heroTile .hero-gauge .v'));
+    const heroWinEl = document.querySelector('#heroTile .hero-gauge .v');
+    tickIf('hero:win', heroWinEl);
+    sweepIf('hero:win', heroWinEl);
+    sweepIf('road:odds', document.querySelector('#roadWrap .road-odds__pct'));
     tickIf('you:rank', document.querySelector('#youTile .you-rankrow .big'));
     document.querySelectorAll('#youTile .you-cell2 .v').forEach((v, i) => tickIf('you:c' + i, v));
     document.querySelectorAll('#lb .card-row').forEach(row => {
@@ -123,13 +152,14 @@
   let simCache = { hash: null, sim: null }, prevSim = null;
   let crownsCache = null, badgesCache = null;
   let rooting = { hash: null, items: [], done: false };
+  let lastRoadRender = 0;
   let lbSort = 'points', lbFilter = '';
   let fbSort = 'points', fbFilter = '';
   let brView = 'consensus', brFilter = '';
   let momentumName = null;
   let rankHistory = [];
   let beatsCache = [], surfaceCache = { headline: null, feed: [] }, rivalriesCache = [];
-  let drawersBuilt = { matches: false, board: false, brackets: false, titlerace: false, more: false };
+  let drawersBuilt = { matches: false, board: false, brackets: false, titlerace: false, road: false, more: false };
 
   function resultsHash(matches) {
     let s = '';
@@ -491,6 +521,10 @@
       <button class="you-sc-btn" type="button">
         <svg class="ico" viewBox="0 0 24 24" style="width:15px;height:15px"><path d="M9 5h6M9 9h6M9 13h4M5 3h11l3 3v15H5z"/></svg>
         Scorecard <span class="you-sc-hint">every point traced</span>
+      </button>
+      <button class="you-road-btn" type="button">
+        <svg class="ico" viewBox="0 0 24 24" style="width:15px;height:15px"><path d="M12 2l2.4 7.4H22l-6 4.4 2.3 7.2L12 16.6 5.7 21l2.3-7.2-6-4.4h7.6z"/></svg>
+        Road to #1 <span class="arr">&rarr;</span>
       </button>`;
   }
 
@@ -722,6 +756,18 @@
     });
   }
 
+  // stamp --i on each row for the staggered scroll-reveal (§4.2). Visible rows only; cheap.
+  // Cap the index so the late rows' animation-range never slides past the entry phase
+  // (uncapped --i pinned rows >~#30 to the opacity:0 'from' keyframe — they never revealed).
+  function stampRowIndex(container) {
+    if (!container) return;
+    let i = 0;
+    container.querySelectorAll('.card-row').forEach(el => {
+      if (el.style.display === 'none') return;
+      el.style.setProperty('--i', Math.min(i++, 12));
+    });
+  }
+
   function renderGlance(rows, state) {
     const lb = $('lb'); if (!lb) return;
     const before = captureRects(lb);
@@ -737,6 +783,7 @@
         return hidden ? h.replace('class="card-row', 'data-hidden="1" style="display:none" class="card-row') : h;
       }).join('');
       const cnt = $('lbCount'); if (cnt) cnt.textContent = f ? `Showing ${shown} of ${COUNT}` : `${COUNT} entries`;
+      stampRowIndex(lb);
       playFlip(lb, before);
       return;
     }
@@ -746,6 +793,7 @@
       const hits = sortRows(rows, lbSort).filter(r => r.name.toLowerCase().includes(f));
       lb.innerHTML = hits.length ? hits.map(r => rowHtml(r, { scope: 'g' })).join('') : '<div class="lb-divider">No players match.</div>';
       const cnt = $('lbCount'); if (cnt) cnt.textContent = `Showing ${hits.length} of ${COUNT}`;
+      stampRowIndex(lb);
       return;
     }
 
@@ -768,6 +816,7 @@
     }
     lb.innerHTML = blocks.join('');
     const cnt = $('lbCount'); if (cnt) cnt.textContent = `${COUNT} entries`;
+    stampRowIndex(lb);
     playFlip(lb, before);
   }
 
@@ -785,6 +834,7 @@
       return hidden ? h.replace('class="card-row', 'data-hidden="1" style="display:none" class="card-row') : h;
     }).join('');
     const cnt = $('fbCount'); if (cnt) cnt.textContent = f ? `Showing ${shown} of ${COUNT}` : `${COUNT} entries`;
+    stampRowIndex(fb);
     playFlip(fb, before);
   }
   function applyFbFilter() {
@@ -797,6 +847,7 @@
       if (!hide) shown++;
     });
     const cnt = $('fbCount'); if (cnt) cnt.textContent = f ? `Showing ${shown} of ${COUNT}` : `${COUNT} entries`;
+    stampRowIndex($('fbLb'));
   }
 
   /* ============================ expanded card modal (click a row -> CARDS.fullCard) ============================ */
@@ -1412,6 +1463,213 @@
     try { CHARTS.momentum($('chartMomentum'), { row, crowns: crownsCache || [] }); } catch (e) {}
   }
 
+  /* ============================ ROAD TO #1 (GLASS-SPEC §7) ============================
+     Promotion of the title-race conditional-odds pipeline into the A–D leverage view.
+     Full leverage board is gated to the signed-in /TARS/ entry; everyone else sees the
+     "In contention" odds headline only. NO engine/MC change — reads simCache.sim,
+     rooting.items (lazy dWin), MC.stakes per upcoming match, lastRows. */
+  // look up the lazily-computed dWin for one match outcome from the rooting pipeline
+  function dWinFor(match, key) {
+    if (!rooting || !rooting.items) return null;
+    const job = rooting.items.find(j => j.match && matchKey(j.match) === matchKey(match));
+    if (!job) return null;
+    const out = (job.outcomes || []).find(o => o.key === key);
+    return out && typeof out.dWin === 'number' ? out.dWin : null;
+  }
+  const fmtPctSigned = p => (p > 0 ? '+' : '') + (Math.abs(p) * 100 >= 9.95 ? Math.round(p * 100) : (p * 100).toFixed(1)) + '%';
+
+  // build the leverage-ranked upcoming-match cards for the /TARS/ viewer
+  function roadLeverageCards(state, rows, me, myRank) {
+    const rivalsAhead = rows.filter(r => r.rank < myRank).map(r => r.name);
+    if (!rivalsAhead.length) return { cards: [], roots: [] };
+    // Align with the conditional-odds (dWin) pipeline (next 3) so every card shown resolves
+    // its odds % within budget rather than sticking on "pending".
+    const up = nextUpcoming(state, 3);
+    const cards = [];
+    for (const m of up) {
+      const stk = mcTry(() => MC.stakes(state, POOL.entries, m), null);
+      if (!stk || !stk.outcomes || !stk.outcomes.length) continue;
+      // for each outcome compute net vs rivals ahead (myDelta - rivalDelta), and the per-rival split
+      let bestOut = null, bestAbsNet = -1, bestDWin = 0;
+      const outViews = stk.outcomes.map(o => {
+        const myDelta = (o.deltas && typeof o.deltas[me] === 'number') ? o.deltas[me] : 0;
+        let net = 0, helps = 0, hurts = 0;
+        const rivDeltas = [];
+        for (const rn of rivalsAhead) {
+          const rd = (o.deltas && typeof o.deltas[rn] === 'number') ? o.deltas[rn] : 0;
+          const nr = myDelta - rd;          // >0 closes the gap on this rival
+          net += nr;
+          if (nr > 0) helps++; else if (nr < 0) hurts++;
+          rivDeltas.push({ name: rn, net: nr });
+        }
+        const dWin = dWinFor(m, o.key);
+        const absNet = Math.abs(net);
+        if (absNet > bestAbsNet) { bestAbsNet = absNet; bestOut = { o, net, helps, hurts, myDelta, rivDeltas, dWin }; }
+        if (dWin != null && Math.abs(dWin) > Math.abs(bestDWin)) bestDWin = dWin;
+        return { o, net, helps, hurts, myDelta, rivDeltas, dWin };
+      });
+      if (!bestOut) continue;
+      // verdict from the best (highest-|net|) outcome's per-rival split
+      const verdict = bestOut.hurts && bestOut.helps ? 'mixed' : (bestOut.net > 0 ? 'helps' : bestOut.net < 0 ? 'hurts' : 'mixed');
+      const leverage = bestAbsNet * (Math.abs(bestDWin) || 0.001);  // §7.4: max|net| × |dWin|
+      cards.push({ match: m, outViews, best: bestOut, verdict, leverage, dWin: bestDWin });
+    }
+    cards.sort((a, b) => b.leverage - a.leverage);
+    // root-for list: the highest-leverage HELP outcomes' winning side
+    const roots = [];
+    for (const c of cards) {
+      const help = c.outViews.filter(v => v.net > 0).sort((a, b) => b.net - a.net)[0];
+      if (!help) continue;
+      const side = help.o.key === 'home' ? c.match.home : help.o.key === 'away' ? c.match.away : null;
+      if (side && !roots.includes(side)) roots.push(side);
+      if (roots.length >= 4) break;
+    }
+    return { cards, roots };
+  }
+
+  function roadCardHtml(c, top) {
+    const m = c.match;
+    const rd = m.round === 'group' ? 'Group ' + (Engine.TEAM_GROUP[m.home] || '') : (ROUND_LABELS[m.round] || m.round);
+    const when = fmtTime(m.date);
+    const v = c.verdict;
+    const vlab = v === 'helps' ? 'Helps' : v === 'hurts' ? 'Hurts' : 'Mixed';
+    // odds % must describe the SAME outcome as the trigger/net copy (c.best), not the
+    // match-wide max-|dWin| (c.dWin, which may belong to a different outcome). The
+    // bestDWin/c.dWin remains the leverage-sort + "next swing" headline driver only.
+    const dWin = c.best.dWin;
+    const oddsCls = dWin == null ? 'flat' : dWin > 0.0005 ? 'up' : dWin < -0.0005 ? 'dn' : 'flat';
+    // While the conditional-odds pipeline is still running, show a transient "computing…";
+    // once it's done, a card with no resolved odds simply drops the clause (no stale "pending").
+    const oddsTxt = dWin == null
+      ? (rooting && rooting.done ? '' : 'odds computing…')
+      : (Math.abs(dWin) < 0.0005 ? '±0% odds' : fmtPctSigned(dWin) + ' odds');
+    const oddsSpan = oddsTxt ? ` · <span class="road-card__odds ${oddsCls}">${esc(oddsTxt)}</span>` : '';
+    // the best outcome's plain-English line + per-rival split (§7.4 / owner decision #4: PER-RIVAL split)
+    const best = c.best;
+    const sideWin = best.o.key === 'home' ? m.home : best.o.key === 'away' ? m.away : null;
+    const trigger = best.o.key === 'draw' ? 'A draw' : (sideWin ? esc(sideWin) + ' winning' : esc(best.o.label));
+    // top 3 rivals by |net| for the split copy
+    const splitRivals = best.rivDeltas.slice().sort((a, b) => Math.abs(b.net) - Math.abs(a.net)).slice(0, 3);
+    const rivLines = splitRivals.filter(r => r.net !== 0).map(r => {
+      const cls = r.net > 0 ? 'up' : 'dn';
+      return `<div class="road-rivd"><span class="rn">${esc(firstName(r.name))} (#${rankOf(r.name)})</span><b class="${cls}">${r.net > 0 ? '▲' : '▼'}${Math.abs(r.net)}</b></div>`;
+    }).join('');
+    const netTxt = best.net > 0 ? `closes <b>${best.net}</b> pt${best.net === 1 ? '' : 's'} net on the rivals ahead`
+      : best.net < 0 ? `loses <b>${Math.abs(best.net)}</b> pt${Math.abs(best.net) === 1 ? '' : 's'} net to the rivals ahead`
+      : `splits even across the rivals ahead`;
+    return `<div class="road-card ${v} ${top ? 'top-lever' : ''}">
+      <div class="road-card__top">
+        <span class="road-card__match">${esc(m.home)} v ${esc(m.away)}</span>
+        <span class="road-card__when">${esc(rd)} · ${esc(when)}</span>
+        <span class="road-verdict ${v}">${vlab}</span>
+      </div>
+      <div class="road-card__line"><b>${trigger}</b> ${netTxt}${oddsSpan}</div>
+      ${rivLines ? `<div class="road-rivals">${rivLines}</div>` : ''}
+    </div>`;
+  }
+
+  function rivalsAheadBoardHtml(rows, me, myRank) {
+    const ahead = rows.filter(r => r.rank < myRank);
+    if (!ahead.length) return '';
+    const myPts = (rows.find(r => r.name === me) || {}).points || 0;
+    return `<div class="road-ra">` + ahead.map(r => {
+      const gap = r.points - myPts;
+      const champCls = r.championAlive ? 'alive' : 'dead';
+      const champTxt = r.championAlive ? 'champ alive' : 'champ out';
+      return `<div class="road-rarow ${r.rank === 1 ? 'lead' : ''}">
+        <span class="rk">${r.rank}</span>
+        <span class="rnm">${avatar(r.name, 22, r.rank === 1 ? { ring: 'var(--gold)' } : null)} ${esc(firstName(r.name))}${r.rank === 1 ? ' 👑' : ''}</span>
+        <span class="rgap">+${gap}</span>
+        <span class="rch ${champCls}">${champTxt}</span>
+      </div>`;
+    }).join('') + `</div>`;
+  }
+
+  function renderRoadDrawer() {
+    const wrap = $('roadWrap'); if (!wrap) return;
+    if (!lastRows || !lastGood) { wrap.innerHTML = '<div class="road-empty">Charting your path to the top — standings are loading…</div>'; return; }
+    try { renderRoadDrawerInner(wrap); }
+    catch (e) { wrap.innerHTML = '<div class="road-empty">Couldn’t chart the path right now — the live simulator hit a snag. It’ll refresh on the next update.</div>'; }
+  }
+  function renderRoadDrawerInner(wrap) {
+    const titleEl = $('roadTitle');
+
+    // viewer = the signed-in /TARS/ entry; gate the full leverage board to them
+    const me = youName;
+    const meRow = me ? lastRows.find(r => r.name === me) : null;
+    const sim = simCache.sim;
+
+    // ----- [A] ODDS HEADLINE (everyone) -----
+    const subjRow = meRow || lastRows[0];
+    const subjName = subjRow ? subjRow.name : null;
+    const wp = subjName ? winProbOf(subjName) : null;
+    const podium = (sim && sim.podiumProb && subjName && typeof sim.podiumProb[subjName] === 'number') ? sim.podiumProb[subjName] : null;
+    const expR = (sim && sim.expRank && subjName && typeof sim.expRank[subjName] === 'number') ? sim.expRank[subjName] : null;
+    const leader = lastRows[0];
+    const gapTop = (subjRow && leader && leader.name !== subjName) ? leader.points - subjRow.points : 0;
+    const isMe = !!meRow;
+    if (titleEl) titleEl.textContent = isMe ? 'Road to #1' : (subjName ? cleanName(subjName) + '’s title odds' : 'Title odds');
+
+    // best upcoming dWin (only meaningful for the /TARS/ viewer's leverage pipeline)
+    const lev = (isMe) ? roadLeverageCards(lastGood, lastRows, me, meRow.rank) : { cards: [], roots: [] };
+    let bestDWin = 0;
+    for (const c of lev.cards) if (Math.abs(c.dWin) > Math.abs(bestDWin)) bestDWin = c.dWin;
+    const dWinBadge = (isMe && Math.abs(bestDWin) >= 0.0005)
+      ? `<span class="road-odds__delta ${bestDWin > 0 ? 'up' : 'dn'}">${esc(fmtPctSigned(bestDWin))} next swing</span>` : '';
+
+    const kicker = isMe
+      ? (subjRow.rank === 1 ? 'Defending #1' : 'Title odds · you')
+      : 'In contention';
+    const oddsHtml = `
+      <div class="road-odds glass--refract">
+        <div class="road-odds__k"><svg class="ico" viewBox="0 0 24 24" style="width:13px;height:13px;color:var(--gold)"><path d="M3 8l3.5 9h11L21 8l-5 4-4-7-4 7z"/></svg> ${esc(kicker)}</div>
+        <div class="road-odds__main">
+          <span class="road-odds__pct num">${wp != null ? esc(pctLabel(wp)) : '—'}</span>
+          ${dWinBadge}
+        </div>
+        <div class="road-odds__sub">
+          ${podium != null ? `<span>podium <b>${esc(pctLabel(podium))}</b></span>` : ''}
+          ${expR != null ? `<span>exp rank <b>${expR.toFixed(1)}</b></span>` : ''}
+          ${subjRow && subjRow.rank > 1 ? `<span>gap to #1 <b>${gapTop}</b> pts</span>` : (subjRow && subjRow.rank === 1 ? `<span><b>Top of ${esc(POOL.poolName)}</b></span>` : '')}
+        </div>
+      </div>`;
+
+    if (!isMe) {
+      // non-TARS: headline only (same layout, no leverage board)
+      wrap.innerHTML = oddsHtml + `<div class="road-empty">Sign in as your own entry to see the full title-leverage board — which upcoming results close the gap, and on whom.</div>`;
+      tickScan();
+      return;
+    }
+
+    // ----- [B] LEVERAGE-RANKED UPCOMING MATCHES -----
+    let bHtml;
+    if (!hasMC()) {
+      bHtml = `<div class="road-empty">Live leverage needs the simulator, which isn’t available right now.</div>`;
+    } else if (!lev.cards.length) {
+      bHtml = meRow.rank === 1
+        ? `<div class="road-empty">You’re #1 — no rivals ahead. The board defends from here.</div>`
+        : `<div class="road-empty">No upcoming fixtures to move the gap yet. Check back when the next round is scheduled.</div>`;
+    } else {
+      bHtml = `<div class="road-sec">Where the leverage is<span class="road-sub">Upcoming results ranked by how much they swing your title odds and close the gap.</span></div>`
+        + lev.cards.map((c, i) => roadCardHtml(c, i === 0)).join('');
+    }
+
+    // ----- [C] RIVALS-AHEAD BOARD -----
+    const cHtml = meRow.rank > 1
+      ? `<div class="road-sec">Rivals ahead<span class="road-sub">${meRow.rank - 1} ${meRow.rank - 1 === 1 ? 'entry stands' : 'entries stand'} between you and #1.</span></div>${rivalsAheadBoardHtml(lastRows, me, meRow.rank)}`
+      : '';
+
+    // ----- [D] WHAT HAS TO HAPPEN -----
+    let dHtml = '';
+    if (lev.roots.length) {
+      dHtml = `<div class="road-todo"><h4><svg class="ico" viewBox="0 0 24 24" style="width:16px;height:16px;color:var(--gold)"><path d="M5 13l4 4L19 7"/></svg> What has to happen</h4>
+        <ul><li><svg class="ico rb" viewBox="0 0 24 24" style="width:14px;height:14px"><path d="M5 13l4 4L19 7"/></svg><span>Root for <b>${lev.roots.map(esc).join(', ')}</b> in the upcoming results above — those swing the most odds your way.</span></li></ul></div>`;
+    }
+
+    wrap.innerHTML = oddsHtml + bHtml + cHtml + dHtml;
+    tickScan();
+  }
+
   /* ============================ more drawer ============================ */
   function renderBadges() {
     const wrap = $('badges'), zone = $('badgesCons'); if (!wrap) return;
@@ -1592,6 +1850,8 @@
       renderGlance(lastRows, lastGood);
       if (drawersBuilt.board) renderFullBoard();
       if (drawersBuilt.titlerace) renderTitleRaceDrawer();
+      if (drawersBuilt.road || openDrawer === 'road') renderRoadDrawer();
+      updateRoadDock();
       tickScan();
     } catch (e) {}
   }
@@ -1605,7 +1865,7 @@
     // cheap, guarded, stale-aware. (Surface is the move tile + matches-drawer stakes.)
     if (!lastGood || !youName || !hasMC() || !hasRatings()) return;
     if (rooting.hash === currentHash && rooting.done) return;
-    const state = lastGood; const base = simCache.sim; const up = nextUpcoming(state, 4);
+    const state = lastGood; const base = simCache.sim; const up = nextUpcoming(state, 3);
     if (!up.length) { rooting = { hash: currentHash, items: [], done: true }; return; }
     const jobs = up.map(m => {
       const stk = mcTry(() => MC.stakes(state, POOL.entries, m), null);
@@ -1616,20 +1876,50 @@
     if (!jobs.length || !base) { rooting.done = true; return; }
     const t0 = Date.now(); let mi = 0, oi = 0;
     const baseP = (base.winProb && typeof base.winProb[youName] === 'number') ? base.winProb[youName] : 0;
+    function roadDone() {
+      if (openDrawer === 'road') { try { renderRoadDrawer(); } catch (e) {} }
+      try { updateRoadDock(); } catch (e) {}
+    }
     function step() {
       if (rooting.hash !== currentHash) return;
-      if (mi >= jobs.length) { rooting.done = true; return; }
-      if (Date.now() - t0 > 5000) { rooting.done = true; return; }
+      if (mi >= jobs.length) { rooting.done = true; roadDone(); return; }
+      if (Date.now() - t0 > 8000) { rooting.done = true; roadDone(); return; }
       const job = jobs[mi], out = job.outcomes[oi];
       if (!out) { mi++; oi = 0; setTimeout(step, 15); return; }
       try {
-        const cs = MC.simulate({ state, entries: POOL.entries, topology, ratings: RATINGS, sims: 1200, condition: { match: job.match, matchKey: out.key } });
+        const cs = MC.simulate({ state, entries: POOL.entries, topology, ratings: RATINGS, sims: 800, condition: { match: job.match, matchKey: out.key } });
         const p = (cs && cs.winProb && typeof cs.winProb[youName] === 'number') ? cs.winProb[youName] : baseP;
         out.dWin = p - baseP;
       } catch (e) { out.dWin = null; job.degraded = true; }
+      // surface the freshly-computed dWin into the Road-to-#1 view if it's currently open
+      // (throttled — renderRoadDrawer re-runs MC.stakes for up to 6 matches; don't do that every 15ms)
+      const nowT = Date.now();
+      if (openDrawer === 'road' && nowT - lastRoadRender > 700) {
+        lastRoadRender = nowT; try { renderRoadDrawer(); } catch (e2) {}
+      }
+      try { updateRoadDock(); } catch (e3) {}
       oi++; setTimeout(step, 15);
     }
     setTimeout(step, 15);
+  }
+
+  // dock "Road to #1" pill: gold-active for the signed-in viewer + live best-swing badge
+  function updateRoadDock() {
+    const pill = $('dockRoadPill'); if (!pill) return;
+    const sub = $('dockRoadSub'); const badge = $('dockRoadBadge');
+    const isMe = !!(youName && lastRows && lastRows.find(r => r.name === youName));
+    pill.classList.toggle('road', isMe);       // gold tint only when it's the viewer's own road
+    if (sub) sub.textContent = isMe ? 'Your title leverage' : 'Title-odds view';
+    if (badge) {
+      let best = 0;
+      if (isMe && rooting && rooting.items) {
+        for (const j of rooting.items) for (const o of (j.outcomes || [])) {
+          if (typeof o.dWin === 'number' && Math.abs(o.dWin) > Math.abs(best)) best = o.dWin;
+        }
+      }
+      badge.textContent = (isMe && Math.abs(best) >= 0.005) ? fmtPctSigned(best) : '';
+      badge.style.color = best >= 0 ? 'var(--win)' : 'var(--loss)';
+    }
   }
 
   /* ============================ drawers ============================ */
@@ -1640,6 +1930,7 @@
     else if (name === 'board' && !drawersBuilt.board) { renderPodium(lastRows, 'boardPodium'); renderFullBoard(); drawersBuilt.board = true; }
     else if (name === 'brackets' && !drawersBuilt.brackets) { renderConsensusBoard(lastGood); renderMatrix(lastGood); renderBrViewToggle(); renderPlayerView(lastGood); renderH2H(lastGood, lastRows); drawersBuilt.brackets = true; }
     else if (name === 'titlerace' && !drawersBuilt.titlerace) { renderTitleRaceDrawer(); drawersBuilt.titlerace = true; }
+    else if (name === 'road' && !drawersBuilt.road) { renderRoadDrawer(); drawersBuilt.road = true; }
     else if (name === 'more' && !drawersBuilt.more) { renderBadges(); renderConsensus(lastGood); renderSimilar(); renderPhotoCredits(); drawersBuilt.more = true; }
   }
   function showDrawer(name, focusYou) {
@@ -1649,6 +1940,8 @@
     d.classList.add('open'); d.setAttribute('aria-hidden', 'false');
     if (scrim) scrim.classList.add('open');
     document.body.style.overflow = 'hidden'; openDrawer = name;
+    document.querySelectorAll('.dock-pill[data-drawer]').forEach(p =>
+      p.dataset.drawer === name ? p.setAttribute('aria-current', 'page') : p.removeAttribute('aria-current'));
     if (focusYou) setTimeout(() => { const row = d.querySelector('.card-row[data-you="1"]'); if (row) { row.scrollIntoView({ block: 'center' }); row.classList.add('flash'); setTimeout(() => row.classList.remove('flash'), 900); } }, 300);
   }
   function closeDrawer() {
@@ -1657,6 +1950,7 @@
     if (d) { d.classList.remove('open'); d.setAttribute('aria-hidden', 'true'); }
     if (scrim) scrim.classList.remove('open');
     if (!$('cardModal').classList.contains('open')) document.body.style.overflow = '';
+    document.querySelectorAll('.dock-pill[aria-current]').forEach(p => p.removeAttribute('aria-current'));
     openDrawer = null;
   }
   function openBracketFor(name) {
@@ -1677,7 +1971,7 @@
     renderMatchStrip(state);
     updateLiveBadges(state);
     stakesCache = Object.create(null); // results changed -> stale stakes; recomputed lazily on next open
-    drawersBuilt = { matches: false, board: false, brackets: false, titlerace: false, more: false };
+    drawersBuilt = { matches: false, board: false, brackets: false, titlerace: false, road: false, more: false };
     if (openDrawer) buildDrawer(openDrawer);
     tickScan();
   }
@@ -1825,6 +2119,17 @@
     const closeBtn = e.target.closest('[data-close]'); if (closeBtn) { closeDrawer(); return; }
   });
   const scrimEl = $('scrim'); if (scrimEl) scrimEl.addEventListener('click', () => { if (scOpen) closeScorecard(); else closeDrawer(); });
+
+  // glass-pill cursor catch-light: set --mx/--my on the hovered pill (no-preference only, no JS magnification)
+  if (!REDUCE_MOTION && matchMedia('(pointer:fine)').matches) {
+    document.addEventListener('pointermove', e => {
+      const pill = e.target.closest && e.target.closest('.glass-pill, .pool-seg, .navbtn');
+      if (!pill) return;
+      const r = pill.getBoundingClientRect();
+      pill.style.setProperty('--mx', ((e.clientX - r.left) / r.width * 100) + '%');
+      pill.style.setProperty('--my', ((e.clientY - r.top) / r.height * 100) + '%');
+    }, { passive: true });
+  }
   document.addEventListener('keydown', e => {
     if (e.key !== 'Escape') return;
     if ($('cardModal').classList.contains('open')) { closeCardModal(); return; }
@@ -1834,7 +2139,10 @@
   // scorecard close button + YOU-tile "Scorecard" button (delegated — the tile re-renders each refresh)
   const scCloseEl = $('scorecardClose'); if (scCloseEl) scCloseEl.addEventListener('click', closeScorecard);
   const youTileEl = $('youTile');
-  if (youTileEl) youTileEl.addEventListener('click', e => { if (e.target.closest('.you-sc-btn') && youName) openScorecard(youName); });
+  if (youTileEl) youTileEl.addEventListener('click', e => {
+    if (e.target.closest('.you-road-btn')) { showDrawer('road'); return; }
+    if (e.target.closest('.you-sc-btn') && youName) openScorecard(youName);
+  });
 
   const viewAllBtn = $('viewAllBtn'); if (viewAllBtn) viewAllBtn.addEventListener('click', () => showDrawer('board'));
   $('refreshBtn').onclick = refresh;
@@ -1850,6 +2158,11 @@
   rankHistory = loadRankHistory();
   renderPoolSwitch();
   renderIdentity();
+  // hide the Road-to-#1 dock pill entirely if this pool has no signed-in /TARS/ entry
+  (function () {
+    const pill = $('dockRoadPill');
+    if (pill && !youName) { pill.classList.remove('road'); const s = $('dockRoadSub'); if (s) s.textContent = 'Title-odds view'; }
+  })();
   fillPickers();
   setInterval(() => {
     secs--;

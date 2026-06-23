@@ -61,7 +61,24 @@
   --grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='160' height='160' filter='url(%23n)' opacity='1'/></svg>");
   /* 48-cell motif — squares + quarter-circles (material device #5) */
   --cell48: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='96' height='96'><g fill='none' stroke='%23E8B73A' stroke-width='1.2' opacity='0.5'><rect x='0.5' y='0.5' width='47' height='47'/><rect x='48.5' y='48.5' width='47' height='47'/><path d='M48 0.5 A47.5 47.5 0 0 1 95.5 48'/><path d='M0.5 48 A47.5 47.5 0 0 0 48 95.5'/></g></svg>");
+
+  /* ---- LIQUID GLASS SYSTEM (GLASS-SPEC §2.3) ---- */
+  --glass-blur:   20px;   /* panels  */
+  --glass-blur-nav: 24px; /* clear chrome blurs harder, tints lighter */
+  --glass-blur-sm: 12px;  /* pills, mobile (<=560px drop to this) */
+  --glass-sat:    160%;
+  --glass-bri:    1.05;
+
+  /* light direction is ALWAYS top-left / 135deg — never vary it */
+  --glass-edge:      rgba(255,255,255,.55);  /* bright specular rim */
+  --glass-edge-soft: rgba(255,255,255,.12);  /* top catch-light hairline */
+  --glass-ring:      rgba(255,255,255,.08);  /* full inner ring */
+
+  /* lift / contact shadow (panel floats above content) */
+  --glass-lift: 0 10px 30px -10px rgba(0,0,0,.55), 0 2px 6px rgba(0,0,0,.35);
+  --glass-lift-hi: 0 16px 40px -12px rgba(0,0,0,.6), 0 2px 8px rgba(0,0,0,.4); /* dock/drawer */
 }
+@property --spec-x{ syntax:'<percentage>'; inherits:false; initial-value:-20%; }
 
 /* ---- DARK theme (default) ---- */
 :root,:root[data-theme="dark"]{
@@ -87,6 +104,11 @@
   --shadow-hero: 0 1px 2px rgba(0,0,0,.5), 0 22px 60px -12px rgba(0,0,0,.7);
   --spec: inset 0 1px 0 rgba(255,255,255,.08);
   --mesh:     #ffffff08;
+  /* ---- glass tints (dark) ---- */
+  --glass-tint:   rgba(20,28,42,.55);  /* ≈ --surface @ 55% */
+  --glass-tint-2: rgba(20,28,42,.72);  /* denser, for text-bearing rows */
+  --nav-tint-top: rgba(10,14,20,.72);
+  --nav-tint-bot: rgba(10,14,20,.50);
 }
 
 /* ---- LIGHT theme ---- */
@@ -117,6 +139,17 @@
   --win:      #149E4B;
   --accent:   #0E72D6;
   --live:     #E11D48;
+  /* ---- glass tints (light) ---- */
+  --glass-tint:   rgba(255,255,255,.55);
+  --glass-tint-2: rgba(255,255,255,.74);
+  --glass-edge:      rgba(255,255,255,.9);
+  --glass-edge-soft: rgba(255,255,255,.5);
+  --glass-ring:      rgba(15,23,42,.06);
+  --glass-bri:    1.0;
+  --glass-lift: 0 10px 30px -10px rgba(15,23,42,.18), 0 2px 6px rgba(15,23,42,.10);
+  --glass-lift-hi: 0 16px 40px -12px rgba(15,23,42,.22), 0 2px 8px rgba(15,23,42,.12);
+  --nav-tint-top: rgba(246,247,249,.78);
+  --nav-tint-bot: rgba(246,247,249,.58);
 }
 
 /* ============================================================ BASE */
@@ -155,11 +188,72 @@ img{ max-width: 100%; }
 .wrap{ max-width: var(--maxw); margin: 0 auto; padding: 0 24px; }
 @media (max-width:560px){ .wrap{ padding: 0 14px; } }
 
+/* ============================================================ LIQUID GLASS MIXINS (GLASS-SPEC §2.4–§2.7) */
+/* Tier-1 panel mixin: dual opposing inset rim shadows fake the bezel lensing. */
+.glass{
+  position:relative; border-radius:var(--r-lg);
+  background: var(--glass-tint);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat)) brightness(var(--glass-bri));
+          backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat)) brightness(var(--glass-bri));
+  border:1px solid transparent;
+  box-shadow:
+    0 1px 0 0 var(--glass-edge-soft) inset,            /* top hairline catch-light */
+    0 0 0 1px var(--glass-ring) inset,                 /* full inner ring */
+    -1px -1px 6px -2px var(--glass-edge) inset,         /* bottom-right rim (light from TL) */
+     2px  2px 10px -6px rgba(255,255,255,.45) inset,    /* opposite-edge refraction glow */
+    var(--glass-lift);
+  contain: paint;            /* bound repaint, protect INP */
+  isolation: isolate;
+}
+/* specular ring (rounded gradient rim) — mask-composite (border-image can't round corners) */
+.glass::before{
+  content:''; position:absolute; inset:0; border-radius:inherit; padding:1.5px; pointer-events:none; z-index:0;
+  background: linear-gradient(135deg, var(--glass-edge), transparent 45%, var(--glass-edge-soft));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+          mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor; mask-composite: exclude;
+}
+
+/* Tier-2 "Clear" refraction (Chromium-only, gated by .has-refract + @supports). Hero + Road-odds only. */
+@supports ((backdrop-filter:url(#lg)) or (-webkit-backdrop-filter:url(#lg))){
+  .has-refract .glass--refract{
+    -webkit-backdrop-filter: blur(8px) url(#lg) saturate(160%);
+            backdrop-filter: blur(8px) url(#lg) saturate(160%);
+  }
+}
+.glass--refract{ transform: translateZ(0); }   /* promote the 1–2 Tier-2 surfaces */
+
+/* glass pill — interactive light response (pool-switch, navbtn, verdict chips) */
+.glass-pill{
+  position:relative; border-radius:999px; padding:8px 14px;
+  background: rgba(255,255,255,.10);
+  -webkit-backdrop-filter: blur(var(--glass-blur-sm)) saturate(160%);
+          backdrop-filter: blur(var(--glass-blur-sm)) saturate(160%);
+  border:none; color:var(--ink-2); cursor:pointer;
+  box-shadow:
+    0 1px 0 rgba(255,255,255,.35) inset,
+    0 -2px 6px -3px rgba(255,255,255,.4) inset,
+    0 4px 12px -6px rgba(0,0,0,.5);
+  transition: transform .18s var(--ease-out), box-shadow .18s, background .18s, color .18s;
+}
+:root[data-theme="light"] .glass-pill{ background:rgba(15,23,42,.06); }
+.glass-pill:hover{ background:rgba(255,255,255,.16); transform:translateY(-1px); color:var(--ink); }
+:root[data-theme="light"] .glass-pill:hover{ background:rgba(15,23,42,.10); }
+.glass-pill:active{ transform:translateY(0) scale(.98);
+  box-shadow:0 1px 0 rgba(255,255,255,.25) inset, 0 2px 6px -4px rgba(0,0,0,.6); }
+/* cursor-tracked catch-light: app.js sets --mx/--my on pointermove (no-preference only) */
+.glass-pill::after{ content:''; position:absolute; inset:0; border-radius:inherit; pointer-events:none; z-index:0;
+  background: radial-gradient(120px 60px at var(--mx,50%) var(--my,0%), rgba(255,255,255,.35), transparent 60%);
+  opacity:0; transition:opacity .2s; }
+.glass-pill:hover::after{ opacity:1; }
+
 /* ============================================================ NAV */
 nav{ position: sticky; top: 0; z-index: 60; height: var(--nav-h);
-  background: color-mix(in srgb, var(--canvas) 84%, transparent);
-  backdrop-filter: blur(14px) saturate(140%); -webkit-backdrop-filter: blur(14px) saturate(140%);
-  border-bottom: 1px solid var(--line); }
+  background: linear-gradient(to bottom, var(--nav-tint-top), var(--nav-tint-bot));
+  -webkit-backdrop-filter: blur(var(--glass-blur-nav)) saturate(180%) brightness(1.1);
+          backdrop-filter: blur(var(--glass-blur-nav)) saturate(180%) brightness(1.1);
+  border-bottom:1px solid rgba(255,255,255,.10);
+  box-shadow: 0 1px 0 rgba(255,255,255,.06) inset, 0 8px 24px -12px rgba(0,0,0,.6); }
 nav .inner{ max-width: var(--maxw); margin:0 auto; height:var(--nav-h); padding:0 24px;
   display:flex; align-items:center; gap:12px; }
 @media (max-width:560px){ nav .inner{ padding:0 14px; gap:8px; } }
@@ -169,8 +263,12 @@ nav .inner{ max-width: var(--maxw); margin:0 auto; height:var(--nav-h); padding:
 .brand .word{ font-family: var(--f-disp); font-weight:800; font-size:15px; letter-spacing:-.01em; white-space:nowrap; }
 @media (max-width:760px){ .brand .word{ display:none; } }
 
-.pool-switch{ display:flex; align-items:center; gap:3px; background:var(--surface-2);
-  border:1px solid var(--line); border-radius:999px; padding:3px; }
+.pool-switch{ display:flex; align-items:center; gap:3px; border-radius:999px; padding:3px;
+  background: rgba(255,255,255,.07);
+  -webkit-backdrop-filter: blur(var(--glass-blur-sm)) saturate(160%);
+          backdrop-filter: blur(var(--glass-blur-sm)) saturate(160%);
+  box-shadow: 0 1px 0 rgba(255,255,255,.28) inset, 0 4px 12px -6px rgba(0,0,0,.5); }
+:root[data-theme="light"] .pool-switch{ background:rgba(15,23,42,.05); }
 .pool-seg{ display:inline-flex; align-items:center; gap:6px; border:none; background:transparent;
   color:var(--ink-2); font-weight:700; font-size:12.5px; padding:6px 12px; border-radius:999px;
   cursor:pointer; white-space:nowrap; transition:background .15s ease,color .15s ease; }
@@ -195,10 +293,14 @@ nav .spacer{ flex:1; }
   font-size:12.5px; color:var(--dim); font-variant-numeric:tabular-nums; padding:0 4px; }
 .nav-count.live{ color:var(--live); }
 @media (max-width:680px){ .nav-count{ display:none; } }
-.navbtn{ display:inline-flex; align-items:center; gap:6px; height:32px; padding:0 12px;
+.navbtn{ position:relative; display:inline-flex; align-items:center; gap:6px; height:32px; padding:0 12px;
   border-radius:999px; border:1px solid transparent; background:transparent;
-  color:var(--ink-2); font-size:13px; font-weight:600; cursor:pointer; transition:background .15s ease,color .15s ease; }
-.navbtn:hover{ background:var(--surface-2); color:var(--ink); }
+  color:var(--ink-2); font-size:13px; font-weight:600; cursor:pointer;
+  transition:transform .15s var(--ease-out), background .15s ease, box-shadow .15s ease, color .15s ease; }
+.navbtn:not(.share):hover{ background:rgba(255,255,255,.12); color:var(--ink); transform:translateY(-1px);
+  box-shadow:0 1px 0 rgba(255,255,255,.3) inset, 0 4px 12px -6px rgba(0,0,0,.5);
+  -webkit-backdrop-filter:blur(var(--glass-blur-sm)) saturate(160%); backdrop-filter:blur(var(--glass-blur-sm)) saturate(160%); }
+:root[data-theme="light"] .navbtn:not(.share):hover{ background:rgba(15,23,42,.08); }
 .navbtn.icon-only{ width:32px; padding:0; justify-content:center; }
 .navbtn.share{ color:var(--gold-ink); background:var(--gold); box-shadow:var(--spec); }
 .navbtn.share:hover{ filter:brightness(1.06); background:var(--gold); color:var(--gold-ink); }
@@ -226,8 +328,20 @@ h2.sec{ font-family:var(--f-ui); font-size:11px; font-weight:800; letter-spacing
 
 /* ============================================================ ZONE 0 — STORY BAR */
 .zone0{ display:flex; align-items:center; gap:13px; padding:15px 18px; margin:6px 0 18px;
-  background:var(--hero-grad); border:1px solid var(--line); border-radius:var(--r-lg);
-  position:relative; overflow:hidden; box-shadow:var(--shadow-sm); }
+  background:var(--hero-grad); border:1px solid transparent; border-radius:var(--r-lg);
+  position:relative; overflow:hidden;
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat)) brightness(var(--glass-bri));
+          backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat)) brightness(var(--glass-bri));
+  box-shadow:
+    0 1px 0 0 var(--glass-edge-soft) inset,
+    0 0 0 1px var(--glass-ring) inset,
+    -1px -1px 6px -2px var(--glass-edge) inset,
+    var(--glass-lift); isolation:isolate; }
+.zone0::after{ content:''; position:absolute; inset:0; border-radius:inherit; padding:1.5px; pointer-events:none; z-index:0;
+  background: linear-gradient(135deg, var(--glass-edge), transparent 45%, var(--glass-edge-soft));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+          mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor; mask-composite: exclude; }
 .zone0::before{ content:''; position:absolute; inset:0; pointer-events:none; background-image:var(--cell48); background-size:96px 96px; opacity:.06;
   -webkit-mask:radial-gradient(120% 130% at 6% 0%, #000, transparent 70%); mask:radial-gradient(120% 130% at 6% 0%, #000, transparent 70%); }
 .zone0 .z0-eye{ flex:0 0 auto; font-family:var(--f-ui); font-size:9.5px; font-weight:800; letter-spacing:.1em;
@@ -245,10 +359,26 @@ h2.sec{ font-family:var(--f-ui); font-size:11px; font-weight:800; letter-spacing
 .z1-side{ display:flex; flex-direction:column; gap:16px; min-width:0; }
 
 /* HERO leader card host (CARDS.fullCard mounts here, framed by hero chrome) */
-.hero-tile{ position:relative; overflow:hidden; background:var(--score-bug-grad);
-  border-radius:var(--r-lg); padding:20px 22px 22px; color:#fff; box-shadow:var(--shadow-hero), var(--spec);
-  --team: var(--gold); }
-.hero-tile::before{ content:''; position:absolute; top:0; left:0; right:0; height:2px; background:var(--team,var(--gold)); opacity:.9; }
+.hero-tile{ position:relative; overflow:hidden;
+  background: var(--score-bug-grad);
+  border-radius:var(--r-lg); padding:20px 22px 22px; color:#fff;
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat)) brightness(var(--glass-bri));
+          backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat)) brightness(var(--glass-bri));
+  box-shadow:
+    0 1px 0 0 var(--glass-edge-soft) inset,
+    0 0 0 1px var(--glass-ring) inset,
+    -1px -1px 6px -2px var(--glass-edge) inset,
+    var(--shadow-hero);
+  isolation:isolate; --team: var(--gold); }
+/* Tier-2 refraction (Chromium-only, .has-refract) sits on top of the score-bug gradient */
+@supports ((backdrop-filter:url(#lg)) or (-webkit-backdrop-filter:url(#lg))){
+  .has-refract .hero-tile{
+    -webkit-backdrop-filter: blur(8px) url(#lg) saturate(160%);
+            backdrop-filter: blur(8px) url(#lg) saturate(160%);
+  }
+}
+.has-refract .hero-tile{ transform: translateZ(0); }
+.hero-tile::before{ content:''; position:absolute; top:0; left:0; right:0; height:2px; background:var(--team,var(--gold)); opacity:.9; z-index:2; }
 .hero-tile::after{ content:''; position:absolute; inset:0; pointer-events:none; background-image:var(--grain); opacity:.04; mix-blend-mode:overlay; }
 .hero-grid{ position:relative; z-index:1; display:grid; grid-template-columns:auto 1fr; gap:20px; align-items:center; }
 @media (max-width:520px){ .hero-grid{ grid-template-columns:1fr; gap:14px; } }
@@ -268,7 +398,16 @@ h2.sec{ font-family:var(--f-ui); font-size:11px; font-weight:800; letter-spacing
 .hero-gauge{ margin:14px 0 4px; }
 .hero-gauge .glab{ display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px; }
 .hero-gauge .glab .l{ font-family:var(--f-ui); font-size:9.5px; font-weight:800; letter-spacing:.09em; text-transform:uppercase; color:rgba(255,255,255,.55); }
-.hero-gauge .glab .v{ font-family:var(--f-num); font-weight:900; font-size:24px; color:var(--accent); font-variant-numeric:tabular-nums; line-height:1; }
+.hero-gauge .glab .v{ position:relative; font-family:var(--f-num); font-weight:900; font-size:24px; color:var(--accent); font-variant-numeric:tabular-nums; line-height:1; overflow:hidden; }
+/* specular sweep across the % on win-prob update (wow #1) — JS toggles .sweep */
+@media (prefers-reduced-motion: no-preference){
+  .hero-gauge .glab .v.sweep::after,
+  .road-odds__pct.sweep::after{
+    content:''; position:absolute; inset:0; pointer-events:none; border-radius:4px;
+    background:linear-gradient(100deg, transparent calc(var(--spec-x) - 18%), rgba(255,255,255,.7) var(--spec-x), transparent calc(var(--spec-x) + 18%));
+    animation:specsweep .7s var(--ease-out) forwards; }
+  @keyframes specsweep{ from{--spec-x:-20%;} to{--spec-x:120%;} }
+}
 .hero-gauge .track{ height:10px; border-radius:999px; background:rgba(255,255,255,.1); overflow:hidden; }
 .hero-gauge .track i{ display:block; height:100%; border-radius:999px; background:var(--accent); transition:width .5s var(--ease); min-width:2px; }
 .hero-pick{ margin-top:13px; font-size:12.5px; color:rgba(255,255,255,.85); display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
@@ -279,9 +418,24 @@ h2.sec{ font-family:var(--f-ui); font-size:11px; font-weight:800; letter-spacing
 
 /* YOU tile + MOVE OF THE DAY tile */
 .you-tile{ position:relative; overflow:hidden; background:var(--score-bug-grad); border-radius:var(--r-lg);
-  padding:20px 20px 18px; color:#fff; display:flex; flex-direction:column; box-shadow:var(--shadow-sm), var(--spec); }
+  padding:20px 20px 18px; color:#fff; display:flex; flex-direction:column;
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat)) brightness(var(--glass-bri));
+          backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat)) brightness(var(--glass-bri));
+  box-shadow:
+    0 1px 0 0 var(--glass-edge-soft) inset,
+    0 0 0 1px var(--glass-ring) inset,
+    -1px -1px 6px -2px var(--glass-edge) inset,
+    var(--glass-lift); isolation:isolate; }
 /* YOU is identity/info — gold brand chrome, not azure (azure is reserved for win%/odds) */
-.you-tile::before{ content:''; position:absolute; top:0; left:0; right:0; height:2px; background:var(--gold); opacity:.8; }
+.you-tile::before{ content:''; position:absolute; top:0; left:0; right:0; height:2px; background:var(--gold); opacity:.8; z-index:2; }
+/* gold "Road to #1 →" entry button on the YOU tile (next to the scorecard CTA, /TARS/ only) */
+.you-road-btn{ display:flex; align-items:center; gap:8px; width:100%; margin-top:9px; cursor:pointer;
+  font-family:var(--f-ui); font-size:12.5px; font-weight:700; color:var(--gold-soft);
+  background:color-mix(in srgb,var(--gold) 14%, transparent); border:1px solid color-mix(in srgb,var(--gold) 38%, transparent);
+  border-radius:var(--r-sm); padding:9px 12px; transition:background .15s ease; }
+.you-road-btn:hover{ background:color-mix(in srgb,var(--gold) 22%, transparent); }
+.you-road-btn .ico{ flex:0 0 auto; color:var(--gold); }
+.you-road-btn .arr{ margin-left:auto; font-family:var(--f-num); font-weight:800; }
 .you-tile .kicker{ font-family:var(--f-ui); font-weight:800; font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--gold-soft); }
 .you-rankrow{ display:flex; align-items:flex-end; gap:12px; margin:8px 0 4px; }
 .you-rankrow .big{ font-family:var(--f-num); font-weight:900; font-size:var(--display-l); line-height:.82; letter-spacing:-.02em; color:#fff; font-variant-numeric:tabular-nums; }
@@ -454,33 +608,77 @@ h2.sec{ font-family:var(--f-ui); font-size:11px; font-weight:800; letter-spacing
 .riv .rbody{ font-size:12.5px; color:var(--ink-2); min-width:0; } .riv .rbody b{ color:var(--ink); }
 .riv .rswap{ margin-left:auto; flex:0 0 auto; font-family:var(--f-num); font-weight:800; font-size:13px; color:var(--accent); font-variant-numeric:tabular-nums; }
 
-/* ============================================================ DRAWER DOCK */
-.dock{ display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:10px; }
-@media (max-width:760px){ .dock{ grid-template-columns:repeat(3,minmax(0,1fr)); } }
+/* ============================================================ DRAWER DOCK — floating glass command bar (§5.2) */
+.dock{ position:sticky; bottom:14px; z-index:50; margin:0 auto; width:max-content; max-width:calc(100% - 8px);
+  display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:8px; padding:8px;
+  border-radius:999px; /* + .glass mixin applied below */
+  background: var(--glass-tint);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat)) brightness(var(--glass-bri));
+          backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat)) brightness(var(--glass-bri));
+  border:1px solid transparent;
+  box-shadow:
+    0 1px 0 0 var(--glass-edge-soft) inset,
+    0 0 0 1px var(--glass-ring) inset,
+    -1px -1px 6px -2px var(--glass-edge) inset,
+     2px 2px 10px -6px rgba(255,255,255,.45) inset,
+    var(--glass-lift-hi);
+  isolation:isolate; }
+.dock::before{ content:''; position:absolute; inset:0; border-radius:inherit; padding:1.5px; pointer-events:none; z-index:0;
+  background: linear-gradient(135deg, var(--glass-edge), transparent 45%, var(--glass-edge-soft));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+          mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor; mask-composite: exclude; }
+@media (max-width:880px){ .dock{ width:auto; grid-template-columns:repeat(3,minmax(0,1fr)); border-radius:var(--r-xl); } }
 @media (max-width:480px){ .dock{ grid-template-columns:repeat(2,minmax(0,1fr)); } }
-.dock-pill{ position:relative; display:flex; align-items:center; gap:11px; padding:13px 15px; background:var(--surface);
-  border:1px solid var(--line); border-radius:var(--r-md); box-shadow:var(--shadow-sm); cursor:pointer; text-align:left;
-  transition:background .15s ease, border-color .15s ease; }
-.dock-pill:hover{ background:var(--surface-2); border-color:var(--gold); }
-.dock-pill .di{ width:36px; height:36px; border-radius:10px; flex:0 0 auto; display:grid; place-items:center;
-  background:var(--surface-2); border:1px solid var(--line); color:var(--accent); }
-.dock-pill .di .ico{ width:19px; height:19px; }
+.dock-pill{ position:relative; z-index:1; display:flex; align-items:center; gap:11px; padding:11px 15px;
+  background:rgba(255,255,255,.06); border:1px solid transparent; border-radius:999px; cursor:pointer; text-align:left;
+  transition:transform .18s var(--ease-out), background .15s ease, box-shadow .15s ease; }
+:root[data-theme="light"] .dock-pill{ background:rgba(15,23,42,.04); }
+.dock-pill:hover{ background:rgba(255,255,255,.14);
+  box-shadow:0 1px 0 rgba(255,255,255,.3) inset, 0 6px 16px -8px rgba(0,0,0,.5); }
+:root[data-theme="light"] .dock-pill:hover{ background:rgba(15,23,42,.09); }
+@media (prefers-reduced-motion: no-preference){ .dock-pill:hover{ transform:scale(1.06); } }
+.dock-pill[aria-current="page"]{ background:rgba(232,183,58,.16); box-shadow:0 0 0 1px color-mix(in srgb,var(--gold) 55%, transparent) inset; }
+.dock-pill .di{ width:34px; height:34px; border-radius:10px; flex:0 0 auto; display:grid; place-items:center;
+  background:rgba(255,255,255,.08); border:1px solid var(--glass-ring); color:var(--accent); }
+:root[data-theme="light"] .dock-pill .di{ background:rgba(15,23,42,.05); }
+.dock-pill .di .ico{ width:18px; height:18px; }
 .dock-pill .dl{ min-width:0; flex:1 1 auto; overflow:hidden; }
-.dock-pill .dl .dt{ font-family:var(--f-disp); font-weight:800; font-size:13.5px; letter-spacing:-.01em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.dock-pill .dl .ds{ font-size:10.5px; color:var(--dim); margin-top:1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-@media (max-width:560px){ .dock-pill{ padding:12px 12px; gap:9px; } .dock-pill .di{ width:32px; height:32px; } .dock-pill .dl .ds{ display:none; } }
+.dock-pill .dl .dt{ font-family:var(--f-disp); font-weight:800; font-size:13px; letter-spacing:-.01em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.dock-pill .dl .ds{ font-size:10px; color:var(--dim); margin-top:1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+/* gold-tinted Road-to-#1 pill (active when it's the signed-in player's view) */
+.dock-pill.road{ background:rgba(232,183,58,.13); box-shadow:0 0 0 1px color-mix(in srgb,var(--gold) 38%, transparent) inset; }
+.dock-pill.road .di{ background:color-mix(in srgb,var(--gold) 20%, transparent); border-color:color-mix(in srgb,var(--gold) 45%, transparent); color:var(--gold); }
+.dock-pill.road .dt{ color:var(--gold-soft); }
+.dock-pill.road:hover{ background:rgba(232,183,58,.22); }
+@media (max-width:880px){ .dock-pill{ padding:11px 12px; } }
+@media (max-width:560px){ .dock-pill{ padding:11px 12px; gap:9px; justify-content:center; } .dock-pill .di{ width:32px; height:32px; } .dock-pill .dl{ display:none; } }
 .dock-pill .db{ margin-left:auto; flex:0 0 auto; font-family:var(--f-num); font-weight:800; font-size:11px; color:var(--live); font-variant-numeric:tabular-nums; }
+@media (max-width:560px){ .dock-pill .db{ display:none; } }
 
 /* ============================================================ DRAWERS */
-.scrim{ position:fixed; inset:0; z-index:90; background:rgba(0,0,0,.55); opacity:0; pointer-events:none; transition:opacity .2s ease; }
+.scrim{ position:fixed; inset:0; z-index:90; background:rgba(0,0,0,.45);
+  -webkit-backdrop-filter:blur(8px) saturate(120%); backdrop-filter:blur(8px) saturate(120%);
+  opacity:0; pointer-events:none; transition:opacity .2s ease; }
 .scrim.open{ opacity:1; pointer-events:auto; }
 .drawer{ position:fixed; z-index:100; left:50%; bottom:0; transform:translate(-50%, 100%);
   width:100%; max-width:var(--maxw); height:90vh; max-height:90vh; background:var(--canvas);
   border:1px solid var(--line); border-bottom:none; border-radius:var(--r-xl) var(--r-xl) 0 0;
   box-shadow:0 -8px 40px rgba(0,0,0,.5); display:flex; flex-direction:column; transition:transform .26s var(--ease-out); overflow:hidden; }
 .drawer.open{ transform:translate(-50%, 0); }
-.drawer-head{ flex:0 0 auto; display:flex; align-items:center; gap:12px; padding:15px 20px; border-bottom:1px solid var(--line);
-  background:color-mix(in srgb,var(--canvas) 92%, transparent); }
+/* desktop ≥1024px: floating glass card centered, all corners rounded, translate+scale entrance */
+@media (min-width:1024px){
+  .drawer{ bottom:auto; top:50%; max-width:760px; height:auto; max-height:86vh; border:1px solid transparent;
+    border-radius:var(--r-xl); box-shadow:var(--glass-lift-hi); transform:translate(-50%,-46%) scale(.96); opacity:0;
+    transition:transform .28s var(--ease-out), opacity .22s ease; }
+  .drawer.open{ transform:translate(-50%,-50%) scale(1); opacity:1; }
+  .has-refract .drawer{ border-color: var(--glass-ring); }
+  .drawer .drawer-grip{ display:none; }
+}
+.drawer-head{ flex:0 0 auto; position:relative; z-index:2; display:flex; align-items:center; gap:12px; padding:15px 20px; border-bottom:1px solid rgba(255,255,255,.08);
+  background:var(--glass-tint-2);
+  -webkit-backdrop-filter:blur(var(--glass-blur)) saturate(140%); backdrop-filter:blur(var(--glass-blur)) saturate(140%);
+  box-shadow:0 1px 0 rgba(255,255,255,.06) inset; }
 .drawer-grip{ position:absolute; top:7px; left:50%; transform:translateX(-50%); width:38px; height:4px; border-radius:999px; background:var(--line); }
 .drawer-head h3{ font-family:var(--f-disp); font-weight:800; font-size:17px; letter-spacing:-.01em; }
 .drawer-head .dclose{ margin-left:auto; width:34px; height:34px; border-radius:999px; border:1px solid var(--line);
@@ -679,7 +877,7 @@ h2.sec{ font-family:var(--f-ui); font-size:11px; font-weight:800; letter-spacing
 
 /* expanded-card modal (click a row -> CARDS.fullCard) */
 .cardmodal{ position:fixed; inset:0; z-index:120; display:none; align-items:center; justify-content:center; padding:20px;
-  background:rgba(0,0,0,.62); backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px); }
+  background:rgba(0,0,0,.55); backdrop-filter:blur(8px) saturate(120%); -webkit-backdrop-filter:blur(8px) saturate(120%); }
 .cardmodal.open{ display:flex; }
 .cardmodal .cm-inner{ perspective:1100px; width:320px; max-width:92vw; }
 .cardmodal .cm-close{ position:absolute; top:18px; right:18px; width:40px; height:40px; border-radius:999px; border:1px solid var(--line);
@@ -886,6 +1084,169 @@ footer .meta{ text-align:center; font-size:12px; color:var(--dim); }
 .fcb-lines{ margin-top:10px; flex:1 1 auto; overflow-y:auto; } .fcb-lines p{ font-size:11.5px; line-height:1.5; color:var(--ink-2); margin-bottom:6px; }
 .fcb-flip-hint{ margin-top:8px; text-align:center; font-size:10px; color:var(--dim); }
 
+/* ============================================================ 84-ROW BOARD GLASS (§6 / §2.9) */
+/* ONE shared blurred backdrop behind the list; rows are translucent tint cards with NO per-row blur */
+.lb-glass{ position:relative; border-radius:var(--r-lg); padding:6px; isolation:isolate;
+  background: color-mix(in srgb, var(--surface) 30%, transparent);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%); backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+  box-shadow: 0 1px 0 0 var(--glass-edge-soft) inset, 0 0 0 1px var(--glass-ring) inset, var(--glass-lift); }
+.lb-glass > .lb{ position:relative; z-index:1; }
+/* row = translucent TINT card (no own backdrop-filter) + single top inset hairline */
+.lb-glass .card-row{ background: color-mix(in srgb, var(--surface) 72%, transparent);
+  border:1px solid rgba(255,255,255,.06); box-shadow: 0 1px 0 rgba(255,255,255,.05) inset, var(--shadow-sm); }
+:root[data-theme="light"] .lb-glass .card-row{ background: color-mix(in srgb, var(--surface) 80%, transparent); border-color:rgba(15,23,42,.06); }
+.lb-glass .card-row:hover{ background: color-mix(in srgb, var(--surface-2) 82%, transparent); }
+/* true blur reserved for champion-tier row + the data-you (sticky) row only */
+.lb-glass .card-row[data-tier="champion"], .lb-glass .card-row[data-you="1"]{
+  background: var(--glass-tint-2);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat)); backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+  box-shadow: 0 1px 0 0 var(--glass-edge-soft) inset, -1px -1px 6px -2px var(--glass-edge) inset, var(--glass-lift); }
+.lb-glass .card-row[data-you="1"]{ position:sticky; bottom:6px; top:6px; z-index:3; border-color:var(--hl-line); }
+/* off-screen perf: bound layout of off-screen rows + feed beats */
+.lb-glass .card-row{ content-visibility:auto; contain-intrinsic-size:0 56px; }
+.feed .beat{ content-visibility:auto; contain-intrinsic-size:0 56px; }
+
+/* ============================================================ SCROLL & MOTION (§4) */
+.scroll-prog{ position:fixed; top:0; left:0; right:0; height:3px; background:var(--gold); transform-origin:left;
+  transform:scaleX(0); z-index:200; pointer-events:none; }
+/* second parallax mesh layer behind content */
+.page-bg__mesh2{ content:''; position:absolute; inset:-10% 0 0 0; background-image:var(--cell48); background-size:140px 140px; opacity:.04;
+  -webkit-mask: radial-gradient(120% 90% at 50% 10%, #000 20%, transparent 80%); mask: radial-gradient(120% 90% at 50% 10%, #000 20%, transparent 80%); }
+
+@media (prefers-reduced-motion: no-preference){
+  /* zones / dock / strip cards / road cards rise + settle on entry */
+  .zone, .zone0, .zone1, .matchstrip .ma-card, .road-card{
+    animation: glass-rise linear both;
+    animation-timeline: view();
+    animation-range: entry 0% entry 60%;   /* snappy; 'cover' over-animates */
+  }
+  @keyframes glass-rise{ from{opacity:0; transform:translateY(40px) scale(.96);} to{opacity:1; transform:none;} }
+
+  /* match strip cards pop as they snap in horizontally */
+  .matchstrip .ma-card{
+    animation: cardpop linear both;
+    animation-timeline: view(inline);
+    animation-range: entry 10% cover 35%;
+  }
+  @keyframes cardpop{ from{opacity:.3; transform:scale(.92);} to{opacity:1; transform:none;} }
+
+  /* board rows: staggered reveal driven by --i (capped at 12 in stampRowIndex).
+     Scope to the HOME board only — the 84-row drawer scrolls its own container and
+     late rows would otherwise pin to the invisible 'from' keyframe. Tighter range so
+     even the last capped row (--i=12) finishes inside entry: start ≤18%, end ≤53%. */
+  main .lb-glass .card-row{
+    animation: glass-rise linear both;
+    animation-timeline: view();
+    animation-range: entry calc(var(--i,0)*1.5%) entry calc(35% + var(--i,0)*1.5%);
+  }
+  /* belt-and-braces: never stagger (and risk pinning) rows inside a drawer */
+  .drawer .lb-glass .card-row{ animation:none; }
+
+  /* top progress bar scrubs with page scroll */
+  .scroll-prog{
+    animation: scrollgrow linear both;
+    animation-timeline: scroll(root);
+  }
+  @keyframes scrollgrow{ from{transform:scaleX(0);} to{transform:scaleX(1);} }
+
+  /* mesh parallax — slower than the page */
+  .page-bg__mesh2{
+    animation: meshpar linear both;
+    animation-timeline: scroll(root);
+  }
+  @keyframes meshpar{ from{transform:translateY(0);} to{transform:translateY(-80px);} }
+}
+
+/* ============================================================ ROAD TO #1 (§7) */
+.road-wrap{ display:flex; flex-direction:column; gap:14px; }
+/* [A] ODDS HEADLINE — Tier-2 refract glass slab */
+.road-odds{ position:relative; overflow:hidden; border-radius:var(--r-lg); padding:18px 20px; color:#fff;
+  background: var(--hero-grad);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat)) brightness(var(--glass-bri));
+          backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat)) brightness(var(--glass-bri));
+  box-shadow: 0 1px 0 0 var(--glass-edge-soft) inset, 0 0 0 1px var(--glass-ring) inset,
+    -1px -1px 6px -2px var(--glass-edge) inset, var(--glass-lift); isolation:isolate; }
+@supports ((backdrop-filter:url(#lg)) or (-webkit-backdrop-filter:url(#lg))){
+  .has-refract .road-odds{ -webkit-backdrop-filter: blur(8px) url(#lg) saturate(160%); backdrop-filter: blur(8px) url(#lg) saturate(160%); }
+}
+.has-refract .road-odds{ transform: translateZ(0); }
+.road-odds::after{ content:''; position:absolute; inset:0; pointer-events:none; background-image:var(--cell48); background-size:96px 96px; opacity:.06;
+  -webkit-mask:radial-gradient(120% 130% at 90% 0%, #000, transparent 70%); mask:radial-gradient(120% 130% at 90% 0%, #000, transparent 70%); }
+.road-odds__k{ font-family:var(--f-ui); font-size:10px; font-weight:800; letter-spacing:.12em; text-transform:uppercase; color:var(--gold-soft);
+  display:flex; align-items:center; gap:7px; }
+.road-odds__main{ display:flex; align-items:baseline; gap:12px; margin:8px 0 2px; flex-wrap:wrap; }
+.road-odds__pct{ position:relative; font-family:var(--f-num); font-weight:900; font-size:var(--display-l); line-height:.85; letter-spacing:-.02em;
+  color:var(--gold); font-variant-numeric:tabular-nums; overflow:hidden; }
+.road-odds__delta{ font-family:var(--f-num); font-weight:800; font-size:16px; font-variant-numeric:tabular-nums; }
+.road-odds__delta.up{ color:var(--win); } .road-odds__delta.dn{ color:var(--loss); }
+.road-odds__sub{ font-size:12.5px; color:rgba(255,255,255,.78); margin-top:6px; display:flex; flex-wrap:wrap; gap:4px 12px; font-variant-numeric:tabular-nums; }
+.road-odds__sub b{ color:#fff; font-family:var(--f-num); font-weight:800; }
+/* [B] LEVERAGE-RANKED upcoming matches — glass cards w/ verdict-colored left rail */
+.road-sec{ font-family:var(--f-ui); font-size:11px; font-weight:800; letter-spacing:.1em; text-transform:uppercase; color:var(--gold-soft); margin:4px 0 2px; }
+.road-sec .road-sub{ display:block; font-weight:600; letter-spacing:0; text-transform:none; color:var(--dim); font-size:11.5px; margin-top:3px; }
+.road-card{ position:relative; overflow:hidden; border-radius:var(--r-md); padding:13px 15px 13px 18px;
+  background: var(--glass-tint);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat)); backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+  box-shadow: 0 1px 0 0 var(--glass-edge-soft) inset, 0 0 0 1px var(--glass-ring) inset, var(--glass-lift); isolation:isolate; }
+.road-card::before{ content:''; position:absolute; left:0; top:0; bottom:0; width:3px; border-radius:999px; background:var(--rail,var(--gold)); z-index:1; }
+.road-card.helps{ --rail:var(--win); } .road-card.hurts{ --rail:var(--loss); } .road-card.mixed{ --rail:var(--gold); }
+.road-card.top-lever{ box-shadow: 0 1px 0 0 var(--glass-edge-soft) inset, 0 0 0 1px color-mix(in srgb,var(--gold) 45%, transparent) inset, 0 0 22px -8px var(--gold), var(--glass-lift); }
+.road-card__top{ display:flex; align-items:center; gap:9px; margin-bottom:7px; }
+.road-card__match{ font-family:var(--f-disp); font-weight:800; font-size:14px; letter-spacing:-.01em; min-width:0;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.road-card__when{ font-size:10.5px; color:var(--dim); font-weight:600; flex:0 0 auto; }
+.road-verdict{ margin-left:auto; flex:0 0 auto; display:inline-flex; align-items:center; gap:5px; border-radius:999px; padding:4px 10px;
+  font-family:var(--f-ui); font-size:10px; font-weight:800; letter-spacing:.04em; text-transform:uppercase;
+  -webkit-backdrop-filter:blur(var(--glass-blur-sm)); backdrop-filter:blur(var(--glass-blur-sm)); }
+.road-verdict.helps{ color:var(--win); background:color-mix(in srgb,var(--win) 18%, transparent); }
+.road-verdict.hurts{ color:var(--loss); background:color-mix(in srgb,var(--loss) 18%, transparent); }
+.road-verdict.mixed{ color:var(--gold); background:color-mix(in srgb,var(--gold) 18%, transparent); }
+.road-card__odds{ font-family:var(--f-num); font-weight:800; font-size:12.5px; font-variant-numeric:tabular-nums; flex:0 0 auto; }
+.road-card__odds.up{ color:var(--win); } .road-card__odds.dn{ color:var(--loss); } .road-card__odds.flat{ color:var(--dim); }
+.road-card__line{ font-size:12px; color:var(--ink-2); line-height:1.45; }
+.road-card__line b{ color:var(--ink); }
+.road-rivals{ margin-top:7px; display:flex; flex-direction:column; gap:3px; }
+.road-rivd{ display:flex; align-items:center; gap:8px; font-size:11.5px; color:var(--dim); }
+.road-rivd .rn{ min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.road-rivd b{ margin-left:auto; flex:0 0 auto; font-family:var(--f-num); font-weight:800; font-variant-numeric:tabular-nums; }
+.road-rivd b.up{ color:var(--win); } .road-rivd b.dn{ color:var(--loss); } .road-rivd b.flat{ color:var(--dim); }
+/* [C] RIVALS-AHEAD board */
+.road-ra{ display:flex; flex-direction:column; gap:6px; }
+.road-rarow{ position:relative; display:grid; grid-template-columns:34px minmax(0,1fr) auto auto; align-items:center; gap:10px;
+  padding:9px 13px; border-radius:var(--r-sm); background: color-mix(in srgb, var(--surface) 72%, transparent);
+  border:1px solid rgba(255,255,255,.06); }
+:root[data-theme="light"] .road-rarow{ background: color-mix(in srgb, var(--surface) 82%, transparent); border-color:rgba(15,23,42,.06); }
+.road-rarow .rk{ font-family:var(--f-num); font-weight:800; font-size:16px; color:var(--ink-2); text-align:center; font-variant-numeric:tabular-nums; }
+.road-rarow.lead .rk{ color:var(--gold); }
+.road-rarow .rnm{ min-width:0; display:flex; align-items:center; gap:7px; font-weight:700; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.road-rarow .rgap{ font-family:var(--f-num); font-weight:800; font-size:14px; color:var(--ink); font-variant-numeric:tabular-nums; }
+.road-rarow .rch{ font-size:10.5px; color:var(--dim); display:inline-flex; align-items:center; gap:4px; }
+.road-rarow .rch.dead{ color:var(--loss); } .road-rarow .rch.alive{ color:var(--win); }
+/* [D] WHAT HAS TO HAPPEN */
+.road-todo{ border-radius:var(--r-md); padding:14px 16px; background: color-mix(in srgb, var(--surface) 72%, transparent);
+  border:1px solid rgba(255,255,255,.06); }
+.road-todo h4{ font-family:var(--f-disp); font-weight:800; font-size:14px; margin-bottom:9px; display:flex; align-items:center; gap:7px; }
+.road-todo ul{ list-style:none; display:flex; flex-direction:column; gap:7px; }
+.road-todo li{ display:flex; align-items:flex-start; gap:9px; font-size:12.5px; color:var(--ink-2); line-height:1.45; }
+.road-todo li .rb{ flex:0 0 auto; margin-top:1px; color:var(--win); }
+.road-todo li b{ color:var(--ink); }
+.road-empty{ font-size:12.5px; color:var(--dim); padding:6px 2px; }
+
+/* ============================================================ ACCESSIBILITY FALLBACKS (§4.3) */
+@media (prefers-reduced-transparency: reduce){
+  .glass,.glass-pill,nav,.dock,.dock-pill,.drawer-head,.glass--refract,.hero-tile,.you-tile,.zone0,
+  .lb-glass,.lb-glass .card-row,.road-odds,.road-card,.road-rarow,.road-todo,.scrim,.cardmodal{
+    -webkit-backdrop-filter:none !important; backdrop-filter:none !important;
+    background: var(--surface); border-color: var(--line); }
+  .scrim,.cardmodal{ background:rgba(0,0,0,.7); }
+  .glass::before,.dock::before,.zone0::after{ display:none; }
+}
+@media (forced-colors: active){
+  .glass,.glass-pill,nav,.dock,.dock-pill,.drawer,.drawer-head,.hero-tile,.you-tile,.zone0,
+  .lb-glass,.road-odds,.road-card,.road-rarow,.road-todo{ background:Canvas; border:1px solid CanvasText; box-shadow:none; }
+  .glass::before,.dock::before,.zone0::after,.road-card::before{ display:none; }
+}
+
 /* reduced motion */
 @media (prefers-reduced-motion: reduce){
   *,*::before,*::after{ animation-duration:.001ms !important; animation-iteration-count:1 !important; transition-duration:.001ms !important; scroll-behavior:auto !important; }
@@ -894,7 +1255,18 @@ footer .meta{ text-align:center; font-size:12px; color:var(--dim); }
 </style>
 </head>
 <body>
-<div class="page-bg"></div>
+<div class="page-bg"><span class="page-bg__mesh2" aria-hidden="true"></span></div>
+<div class="scroll-prog" aria-hidden="true"></div>
+
+<!-- Tier-2 Liquid-Glass refraction filter (hero leader card + Road-to-#1 odds only) -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <filter id="lg" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB">
+    <feTurbulence type="fractalNoise" baseFrequency="0.008 0.012" numOctaves="2" seed="7" result="noise"/>
+    <feGaussianBlur in="noise" stdDeviation="2" result="soft"/>
+    <feDisplacementMap in="SourceGraphic" in2="soft" scale="24" xChannelSelector="R" yChannelSelector="G"/>
+  </filter>
+</svg>
+
 <div class="shell">
 
 <!-- ============ NAV ============ -->
@@ -970,7 +1342,7 @@ footer .meta{ text-align:center; font-size:12px; color:var(--dim); }
       </button>
       <span class="lb-count" id="lbCount"></span>
     </div>
-    <div class="lb" id="lb"><div class="skeleton">Loading live standings&hellip;</div></div>
+    <div class="lb-glass"><div class="lb" id="lb"><div class="skeleton">Loading live standings&hellip;</div></div></div>
     <div class="lb-foot">
       <button class="navbtn" id="viewAllBtn" style="border:1px solid var(--line)">
         View all <span id="viewAllCount"></span> <svg class="ico" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
@@ -1004,6 +1376,11 @@ footer .meta{ text-align:center; font-size:12px; color:var(--dim); }
       <button class="dock-pill" data-drawer="titlerace">
         <span class="di"><svg class="ico" viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8M21 7v6M21 7h-6"/></svg></span>
         <span class="dl"><span class="dt">Title race</span><span class="ds">Bump, odds &amp; momentum</span></span>
+      </button>
+      <button class="dock-pill road" id="dockRoadPill" data-drawer="road">
+        <span class="di"><svg class="ico" viewBox="0 0 24 24"><path d="M12 2l2.4 7.4H22l-6 4.4 2.3 7.2L12 16.6 5.7 21l2.3-7.2-6-4.4h7.6z"/></svg></span>
+        <span class="dl"><span class="dt">Road to #1</span><span class="ds" id="dockRoadSub">Your title leverage</span></span>
+        <span class="db" id="dockRoadBadge"></span>
       </button>
       <button class="dock-pill" data-drawer="more">
         <span class="di"><svg class="ico" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg></span>
@@ -1067,7 +1444,7 @@ footer .meta{ text-align:center; font-size:12px; color:var(--dim); }
       </button>
       <span class="lb-count" id="fbCount"></span>
     </div>
-    <div class="lb" id="fbLb"><div class="skeleton">Loading full standings&hellip;</div></div>
+    <div class="lb-glass"><div class="lb" id="fbLb"><div class="skeleton">Loading full standings&hellip;</div></div></div>
   </div>
 </aside>
 
@@ -1135,6 +1512,17 @@ footer .meta{ text-align:center; font-size:12px; color:var(--dim); }
       </div>
       <div id="chartMomentum"><div class="skeleton">Momentum builds as points are banked&hellip;</div></div>
     </div>
+  </div>
+</aside>
+
+<!-- ROAD TO #1 drawer -->
+<aside class="drawer" id="drawer-road" aria-hidden="true" role="dialog" aria-label="Road to #1">
+  <span class="drawer-grip"></span>
+  <div class="drawer-head"><h3 id="roadTitle">Road to #1</h3>
+    <button class="dclose" data-close aria-label="Close"><svg class="ico" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  </div>
+  <div class="drawer-body">
+    <div class="road-wrap" id="roadWrap"><div class="skeleton">Charting your path to the top&hellip;</div></div>
   </div>
 </aside>
 
